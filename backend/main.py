@@ -1,3 +1,4 @@
+import uvicorn
 from typing import Union
 
 from fastapi import FastAPI, File, UploadFile
@@ -21,3 +22,6 @@ async def create_upload_file(file: UploadFile):
     c = TestClassification()
     result = c.predict(bytefile=file.file)
     return result
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
