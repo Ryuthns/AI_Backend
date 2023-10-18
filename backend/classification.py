@@ -9,7 +9,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
 
-class TestClassification:
+
+class TrainClassification:
     def __init__(self, num_classes: int):
         self.model = torch.hub.load('pytorch/vision:v0.10.0', 'mobilenet_v2', pretrained=True)
         self.criterion = nn.CrossEntropyLoss()
@@ -84,58 +85,125 @@ class TestClassification:
         return {'loss': epoch_losses, 'accuracy': epoch_accuracies}
 
 
-    def predict(self, bytefile:Union[BinaryIO, None]=None, filename=""):
+    def _load_model(self):
         if os.path.exists('mobilenet_v2_trained.pth'):
             self.model.load_state_dict(torch.load('mobilenet_v2_trained.pth'))
-        
-        input_image = []
-        if bytefile != None:
-            input_image = Image.open(io.BytesIO(bytefile.read()))
-        elif filename != "":
-            input_image = Image.open(filename)
 
-        if input_image == []:
-            return {}
-        self.model.eval()
+    def _preprocess_image(self, input_image):
         preprocess = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-        input_tensor = preprocess(input_image)
-        input_batch = input_tensor.unsqueeze(0) # create a mini-batch as expected by the model
+        return preprocess(input_image).unsqueeze(0)
 
-# move the input and model to GPU for speed if available
+    def predict(self, bytefile: Union[BinaryIO, None]=None, filename=""):
+        self._load_model()
+        
+        input_image = None
+        if bytefile is not None:
+            input_image = Image.open(io.BytesIO(bytefile.read()))
+        elif filename:
+            input_image = Image.open(filename)
+
+        if input_image is None:
+            return {}
+
+        self.model.eval()
+
+        input_batch = self._preprocess_image(input_image)
+
         if torch.cuda.is_available():
             input_batch = input_batch.to('cuda')
             self.model.to('cuda')
 
         with torch.no_grad():
             output = self.model(input_batch)
-# Tensor of shape 1000, with confidence scores over ImageNet's 1000 classes
-        print(output[0])
-# The output has unnormalized scores. To get probabilities, you can run a softmax on it.
+
         probabilities = torch.nn.functional.softmax(output[0], dim=0)
-        print(probabilities)
-        # Read the categories
+        print(probabilities[:5])
+
         if not os.path.exists('mobilenet_v2_trained.pth'):
-            c = {}
-            with open("imagenet_classes.txt", "r") as f:
-                categories = [s.strip() for s in f.readlines()]
-            # Show top categories per image
-            top5_prob, top5_catid = torch.topk(probabilities, 5)
+            return self._get_top_classes(probabilities)
+        
+        return {idx: prob.item() for idx, prob in enumerate(probabilities)}
 
-            for i in range(top5_prob.size(0)):
-                c[categories[top5_catid[i]]] = top5_prob[i].item()
-            
-            return c
-        # Creating a dictionary of class indices and their respective probabilities
-        class_prob_dict = {}
-        for idx in range(len(probabilities)):
-            class_prob_dict[idx] = probabilities[idx].item()
+    def _get_top_classes(self, probabilities):
+        categories = []
+        with open("imagenet_classes.txt", "r") as f:
+            categories = [s.strip() for s in f.readlines()]
 
-        return class_prob_dict
+        top5_prob, top5_catid = torch.topk(probabilities, 5)
+        print(top5_catid, top5_prob)
+        c = {}
+        for i in range(top5_prob.size(0)):
+            c[categories[top5_catid[i]]] = top5_prob[i].item()
+        return c
+
+class TestClassification:
+    def __init__(self):
+        self.model = torch.hub.load('pytorch/vision:v0.10.0', 'mobilenet_v2', pretrained=True)
+        self.criterion = nn.CrossEntropyLoss()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model.to(self.device)
+        # Freeze all layers
+
+    def _load_model(self):
+        if os.path.exists('mobilenet_v2_trained.pth'):
+            self.model.load_state_dict(torch.load('mobilenet_v2_trained.pth'))
+
+    def _preprocess_image(self, input_image):
+        preprocess = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        return preprocess(input_image).unsqueeze(0)
+
+    def predict(self, bytefile: Union[BinaryIO, None]=None, filename=""):
+        self._load_model()
+        
+        input_image = None
+        if bytefile is not None:
+            input_image = Image.open(io.BytesIO(bytefile.read()))
+        elif filename:
+            input_image = Image.open(filename)
+
+        if input_image is None:
+            return {}
+
+        self.model.eval()
+
+        input_batch = self._preprocess_image(input_image)
+
+        if torch.cuda.is_available():
+            input_batch = input_batch.to('cuda')
+            self.model.to('cuda')
+
+        with torch.no_grad():
+            output = self.model(input_batch)
+
+        probabilities = torch.nn.functional.softmax(output[0], dim=0)
+        print(probabilities[:5])
+
+        if not os.path.exists('mobilenet_v2_trained.pth'):
+            return self._get_top_classes(probabilities)
+        
+        return {idx: prob.item() for idx, prob in enumerate(probabilities)}
+
+    def _get_top_classes(self, probabilities):
+        categories = []
+        with open("imagenet_classes.txt", "r") as f:
+            categories = [s.strip() for s in f.readlines()]
+
+        top5_prob, top5_catid = torch.topk(probabilities, 5)
+        print(top5_catid, top5_prob)
+        c = {}
+        for i in range(top5_prob.size(0)):
+            c[categories[top5_catid[i]]] = top5_prob[i].item()
+        return c
 
 def load_images_from_folder(folder_path: str) -> (List[BinaryIO], List[int]):
     bytefiles = []
