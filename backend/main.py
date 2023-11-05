@@ -1,5 +1,5 @@
 import uvicorn
-from typing import Union, List
+from typing import Union, List, BinaryIO
 
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,8 +30,10 @@ def read_item(item_id: int, q: Union[str, None] = None):
 
 
 @app.post("/uploadfile/")
-async def create_upload_file(file: UploadFile):
+async def create_upload_file(file: UploadFile, trained: bool = False, num_class: int = 2):
     c = TestClassification()
+    if trained == True :
+        c = TrainClassification(num_class)
     result = c.predict(bytefile=file.file)
     print(result)
     return result
@@ -39,16 +41,29 @@ async def create_upload_file(file: UploadFile):
 @app.post("/train/")
 async def train_model(
     bytefiles: List[UploadFile] = File(...),
-    labels: List[int] = Form(...),
+    labels: List[str] = Form(...),
     epochs: int = Form(...),
     lr: float = Form(...)
 ):
+    mapping = {}
     # Convert UploadFile objects to BinaryIO
     bytefile_data = [bf.file for bf in bytefiles]
     
+    # Convert the labels to integers
+    label_list = []
+    for value in labels:
+        if value in mapping:
+            integer_index = mapping[value]
+        else:
+            # If the value is not in the dictionary, add it with a new integer index
+            new_index = len(mapping)
+            mapping[value] = new_index
+            integer_index = new_index
+        label_list.append(integer_index)
+    
     # Call the train method with the received data
-    c = TrainClassification(10)
-    result = c.train(bytefile_data, labels, epochs, lr)
+    c = TrainClassification(len(set(label_list)))
+    result = c.train(bytefile_data, label_list, epochs, lr)
 
     # Return the result as JSON
     return result
