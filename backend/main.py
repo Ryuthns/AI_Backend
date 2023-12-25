@@ -1,6 +1,6 @@
 import uvicorn
+import os
 from typing import Union, List, BinaryIO
-
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from classification import TestClassification, TrainClassification
@@ -19,6 +19,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+result_data = {}
+
+
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
@@ -29,6 +32,11 @@ def read_item(item_id: int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 
 
+@app.get("/result/")
+def get_result():
+    return result_data
+
+
 @app.post("/uploadfile/")
 async def create_upload_file(file: UploadFile, trained: bool = False, num_class: int = 2):
     c = TestClassification()
@@ -37,6 +45,7 @@ async def create_upload_file(file: UploadFile, trained: bool = False, num_class:
     result = c.predict(bytefile=file.file)
     print(result)
     return result
+
 
 @app.post("/train/")
 async def train_model(
@@ -64,6 +73,8 @@ async def train_model(
     # Call the train method with the received data
     c = TrainClassification(len(set(label_list)))
     result = c.train(bytefile_data, label_list, epochs, lr)
+    global result_data 
+    result_data = result
 
     # Return the result as JSON
     return result
