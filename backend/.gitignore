@@ -1,3 +1,5 @@
 __pycache__/
 Dog and Cat .png/
 mobilenet_v2_trained.pth
+mongo-data/
+../mongo-data/
