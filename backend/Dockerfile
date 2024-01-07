@@ -9,4 +9,4 @@ ENV UVICORN_PORT=8000
 ENV UVICORN_HOST=0.0.0.0
 
 # Run the application using Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

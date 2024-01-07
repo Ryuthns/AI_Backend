@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/")
 async def greeting():
-    return "hi user"
+    return "hi user1"
 
 
 @router.get("/all")

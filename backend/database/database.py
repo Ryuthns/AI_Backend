@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from pymongo import MongoClient
 
 # Provide the mongodb atlas url to connect python to mongodb using pymongo
-CONNECTION_STRING = "mongodb://root:example@localhost:27017"
+CONNECTION_STRING = "mongodb://root:example@mongodb:27017"
 #
 # Create a connection using MongoClient. You can import MongoClient or use pymongo.MongoClient
 client = MongoClient(CONNECTION_STRING)
