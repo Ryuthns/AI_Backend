@@ -67,7 +67,7 @@ class TrainClassification:
         path = f"{self.username}/{self.project_name}/labels/lebel.txt"
         return path
 
-    async def train(
+    def train(
         self,
         bytefiles: Union[List[BinaryIO], None],
         labels: List[int],
@@ -148,7 +148,7 @@ class TrainClassification:
         with open(result_path, "w") as json_file:
             json.dump(result, json_file)
 
-    async def _load_train_result(self):
+    def _load_train_result(self):
         model_folder = self.get_model_folder()
         result_path = f"{model_folder}/result.json"
         if not os.path.exists(result_path):
