@@ -1,13 +1,14 @@
-import os
-from PIL import Image
-from pydantic_core.core_schema import model_field
-from torchvision import transforms
-import torch
 import io
-from typing import BinaryIO, Tuple, Union, List
-from torch.utils.data import DataLoader, TensorDataset
+import os
+from typing import BinaryIO, List, Tuple, Union
+import json
+
+import torch
 import torch.nn as nn
 import torch.optim as optim
+from PIL import Image
+from pydantic_core.core_schema import model_field
+from torch.utils.data import DataLoader, TensorDataset
 from torchvision import transforms
 
 
@@ -40,15 +41,32 @@ class TrainClassification:
         for param in self.model.classifier[1].parameters():
             param.requires_grad = True
 
-    def check_model_folder(self):
-        folder_path = f"user_project/{self.username}/{self.project_name}/models"
+    def get_model_folder(self):
+        folder_path = (
+            f"user_project/{self.username}/{self.project_name}/models/{self.model_name}"
+        )
         if not (os.path.exists(folder_path) and os.path.isdir(folder_path)):
             os.makedirs(folder_path)
         return folder_path
 
     def get_model_path(self):
-        model_folder = self.check_model_folder()
+        model_folder = self.get_model_folder()
         return f"{model_folder}/{self.model_name}.pth"
+
+    def change_to_num_labels(self, labels):
+        # Get unique labels
+        unique_labels = list(set(labels))
+
+        # Create a mapping from labels to numeric indices
+        label_to_index = {label: index for index, label in enumerate(unique_labels)}
+
+        # Convert original labels to numeric labels using the mapping
+        numeric_labels = torch.tensor([label_to_index[label] for label in labels])
+        return numeric_labels
+
+    def get_label_path(self):
+        path = f"{self.username}/{self.project_name}/labels/lebel.txt"
+        return path
 
     def train(
         self,
@@ -77,6 +95,8 @@ class TrainClassification:
             input_tensor = preprocess(image)
             images.append(input_tensor)
 
+        print("labels:", labels)
+        print("n labels", self.change_to_num_labels(labels))
         train_dataset = TensorDataset(torch.stack(images), torch.Tensor(labels).long())
         train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
 
@@ -116,7 +136,24 @@ class TrainClassification:
         torch.save(self.model.state_dict(), filename)
         print("Finished Training and saved the model")
 
-        return {"loss": epoch_losses, "accuracy": epoch_accuracies}
+        result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
+        self._save_train_result(result)
+        return result
+
+    def _save_train_result(self, result):
+        model_folder = self.get_model_folder()
+        result_path = f"{model_folder}/result.json"
+        # Save to JSON file
+        with open(result_path, "w") as json_file:
+            json.dump(result, json_file)
+
+    def _load_train_result(self):
+        model_folder = self.get_model_folder()
+        result_path = f"{model_folder}/result.json"
+        # Load from JSON file
+        with open(result_path, "r") as json_file:
+            loaded_result = json.load(json_file)
+        return loaded_result
 
     def _load_model(self):
         model_path = self.get_model_path()

@@ -4,6 +4,7 @@ from typing import Union, List, BinaryIO
 from fastapi import FastAPI, File, UploadFile, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from classification import TrainClassification
+from models.ai_models import result_input
 
 from routes.user import router as UserRouter
 
@@ -34,8 +35,13 @@ def read_item(item_id: int, q: Union[str, None] = None):
 
 
 @app.get("/result/")
-def get_result():
-    return result_data
+def get_result(result_data: result_input):
+    data = result_data.dict()
+    c = TrainClassification(
+        2, data["username"], data["project_name"], data["modelname"]
+    )
+    result = c._load_train_result()
+    return result
 
 
 @app.post("/uploadfile/")
@@ -80,7 +86,6 @@ async def train_model(
             integer_index = new_index
         label_list.append(integer_index)
 
-    print(len(set(label_list)), username, project_name, modelname)
     # Call the train method with the received data
     c = TrainClassification(len(set(label_list)), username, project_name, modelname)
     result = c.train(bytefile_data, label_list, epochs, lr)
