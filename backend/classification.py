@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
-from pydantic_core.core_schema import model_field
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import transforms
 
@@ -68,7 +67,7 @@ class TrainClassification:
         path = f"{self.username}/{self.project_name}/labels/lebel.txt"
         return path
 
-    def train(
+    async def train(
         self,
         bytefiles: Union[List[BinaryIO], None],
         labels: List[int],
@@ -130,6 +129,8 @@ class TrainClassification:
             epoch_accuracies.append(epoch_accuracy)
 
             print(f"Epoch {epoch+1}, Loss: {epoch_loss}, Accuracy: {epoch_accuracy}%")
+            batch_result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
+            self._save_train_result(batch_result)
 
         filename = self.get_model_path()
 
@@ -147,9 +148,11 @@ class TrainClassification:
         with open(result_path, "w") as json_file:
             json.dump(result, json_file)
 
-    def _load_train_result(self):
+    async def _load_train_result(self):
         model_folder = self.get_model_folder()
         result_path = f"{model_folder}/result.json"
+        if not os.path.exists(result_path):
+            return {}
         # Load from JSON file
         with open(result_path, "r") as json_file:
             loaded_result = json.load(json_file)

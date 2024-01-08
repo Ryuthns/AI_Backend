@@ -1,7 +1,7 @@
 import uvicorn
 import os
 from typing import Union, List, BinaryIO
-from fastapi import FastAPI, File, UploadFile, Form, Depends
+from fastapi import FastAPI, File, Response, UploadFile, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from classification import TrainClassification
 from models.ai_models import result_input
@@ -34,13 +34,15 @@ def read_item(item_id: int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 
 
-@app.get("/result/")
-def get_result(result_data: result_input):
-    data = result_data.dict()
+@app.post("/result/")
+async def get_result(result_data: result_input):
+    data = result_data.model_dump()
     c = TrainClassification(
         2, data["username"], data["project_name"], data["modelname"]
     )
-    result = c._load_train_result()
+    result = await c._load_train_result()
+    if not result:
+        return Response("failed to get result", status_code=404)
     return result
 
 
@@ -88,7 +90,7 @@ async def train_model(
 
     # Call the train method with the received data
     c = TrainClassification(len(set(label_list)), username, project_name, modelname)
-    result = c.train(bytefile_data, label_list, epochs, lr)
+    result = await c.train(bytefile_data, label_list, epochs, lr)
     global result_data
     result_data = result
 
