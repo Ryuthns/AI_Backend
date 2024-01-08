@@ -3,7 +3,7 @@ import os
 from typing import Union, List, BinaryIO
 from fastapi import FastAPI, File, UploadFile, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from classification import TestClassification, TrainClassification
+from classification import TrainClassification
 
 from routes.user import router as UserRouter
 
