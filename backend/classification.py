@@ -163,6 +163,8 @@ class TrainClassification:
             print("output", output)
 
         probabilities = torch.nn.functional.softmax(output, dim=0)
+        if len(images) == 1:
+            probabilities = torch.nn.functional.softmax(output)
         print(probabilities)
         predicted = torch.argmax(probabilities, dim=1).tolist()
         print("topk:", predicted)
