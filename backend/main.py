@@ -1,7 +1,7 @@
 import uvicorn
 import os
 from typing import Union, List, BinaryIO
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from classification import TestClassification, TrainClassification
 
@@ -40,12 +40,15 @@ def get_result():
 
 @app.post("/uploadfile/")
 async def create_upload_file(
-    file: UploadFile, trained: bool = False, num_class: int = 2
+    bytefiles: List[UploadFile] = File(...),
+    num_class: int = 2,
+    username: str = Form(...),
+    project_name: str = Form(...),
+    modelname: str = Form(...),
 ):
-    c = TestClassification()
-    if trained == True:
-        c = TrainClassification(num_class)
-    result = c.predict(bytefile=file.file)
+    bytefile_data = [bf.file for bf in bytefiles]
+    c = TrainClassification(num_class, username, project_name, modelname)
+    result = c.predict(bytefile_data)
     print(result)
     return result
 
@@ -56,10 +59,14 @@ async def train_model(
     labels: List[str] = Form(...),
     epochs: int = Form(...),
     lr: float = Form(...),
+    username: str = Form(...),
+    project_name: str = Form(...),
+    modelname: str = Form(...),
 ):
     mapping = {}
     # Convert UploadFile objects to BinaryIO
     bytefile_data = [bf.file for bf in bytefiles]
+    print(bytefile_data)
 
     # Convert the labels to integers
     label_list = []
@@ -73,8 +80,9 @@ async def train_model(
             integer_index = new_index
         label_list.append(integer_index)
 
+    print(len(set(label_list)), username, project_name, modelname)
     # Call the train method with the received data
-    c = TrainClassification(len(set(label_list)))
+    c = TrainClassification(len(set(label_list)), username, project_name, modelname)
     result = c.train(bytefile_data, label_list, epochs, lr)
     global result_data
     result_data = result
