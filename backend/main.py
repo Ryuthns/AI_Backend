@@ -1,9 +1,10 @@
 import uvicorn
 import os
 from typing import Union, List, BinaryIO
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, Response, UploadFile, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from classification import TestClassification, TrainClassification
+from classification import TrainClassification
+from models.ai_models import result_input
 
 from routes.user import router as UserRouter
 
@@ -33,19 +34,29 @@ def read_item(item_id: int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 
 
-@app.get("/result/")
-def get_result():
-    return result_data
+@app.post("/result/")
+async def get_result(result_data: result_input):
+    data = result_data.model_dump()
+    c = TrainClassification(
+        2, data["username"], data["project_name"], data["modelname"]
+    )
+    result = await c._load_train_result()
+    if not result:
+        return Response("failed to get result", status_code=404)
+    return result
 
 
 @app.post("/uploadfile/")
 async def create_upload_file(
-    file: UploadFile, trained: bool = False, num_class: int = 2
+    bytefiles: List[UploadFile] = File(...),
+    num_class: int = 2,
+    username: str = Form(...),
+    project_name: str = Form(...),
+    modelname: str = Form(...),
 ):
-    c = TestClassification()
-    if trained == True:
-        c = TrainClassification(num_class)
-    result = c.predict(bytefile=file.file)
+    bytefile_data = [bf.file for bf in bytefiles]
+    c = TrainClassification(num_class, username, project_name, modelname)
+    result = c.predict(bytefile_data)
     print(result)
     return result
 
@@ -56,10 +67,14 @@ async def train_model(
     labels: List[str] = Form(...),
     epochs: int = Form(...),
     lr: float = Form(...),
+    username: str = Form(...),
+    project_name: str = Form(...),
+    modelname: str = Form(...),
 ):
     mapping = {}
     # Convert UploadFile objects to BinaryIO
     bytefile_data = [bf.file for bf in bytefiles]
+    print(bytefile_data)
 
     # Convert the labels to integers
     label_list = []
@@ -74,8 +89,8 @@ async def train_model(
         label_list.append(integer_index)
 
     # Call the train method with the received data
-    c = TrainClassification(len(set(label_list)))
-    result = c.train(bytefile_data, label_list, epochs, lr)
+    c = TrainClassification(len(set(label_list)), username, project_name, modelname)
+    result = await c.train(bytefile_data, label_list, epochs, lr)
     global result_data
     result_data = result
 
