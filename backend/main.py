@@ -2,11 +2,14 @@ import uvicorn
 import os
 from typing import Union, List, BinaryIO
 from fastapi import FastAPI, File, Response, UploadFile, Form, Depends
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from classification import TrainClassification
 from models.ai_models import result_input
 
 from routes.user import router as UserRouter
+from routes.project import router as ProjectRouter
+
 
 app = FastAPI()
 
@@ -21,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(UserRouter, prefix="/user")
+app.include_router(ProjectRouter, prefix="/project")
 result_data = {}
 
 
@@ -60,7 +64,51 @@ async def create_upload_file(
     print(result)
     return result
 
+@app.post("/saveimage/")
+async def save_image(bytefiles: List[UploadFile] = File(...), username : str = Form(...), project_name : str = Form(...) ):
+    # Save user's images 
+    try:
+        for file in bytefiles:
+            # Construct the directory path
+            directory_path = f"user_project/{username}/{project_name}/images"
+            
+            # Create directories if they don't exist
+            os.makedirs(directory_path, exist_ok=True)
+            
+            # Construct the file path
+            file_path = os.path.join(directory_path, file.filename)
+            
+            # Save the file
+            with open(file_path, "wb") as f:
+                f.write(file.file.read())
+        
+        return Response("Files saved successfully", status_code=200)
+    except Exception as e:
+        return Response(f"failed to save image {e.args}", status_code=404)
+    
+@app.get("/getimage/")
+async def get_images(username: str = Form(...), project_name: str = Form(...)):
+    try:
+        folder_path = f"user_project/{username}/{project_name}/images"
 
+        image_urls = []
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                # Assuming all files in the folder are images
+                image_urls.append(f"http://localhost:8000/{file_path}")  # Replace with your actual API server URL
+
+        response_data = {
+            "username": username,
+            "project_name": project_name,
+            "image_urls": image_urls
+        }
+
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        return JSONResponse(content={"error": f"Failed to get image URLs: {e}"}, status_code=500)
+    
 @app.post("/train/")
 async def train_model(
     bytefiles: List[UploadFile] = File(...),
@@ -75,7 +123,7 @@ async def train_model(
     # Convert UploadFile objects to BinaryIO
     bytefile_data = [bf.file for bf in bytefiles]
     print(bytefile_data)
-
+    
     # Convert the labels to integers
     label_list = []
     for value in labels:
