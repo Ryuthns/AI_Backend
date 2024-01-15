@@ -115,6 +115,16 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
     except Exception as e:
         return JSONResponse(content={"error": f"Failed to get image URLs: {e}"}, status_code=500)
     
+@app.get("/image/")
+async def get_images(username: str = Form(...), project_name: str = Form(...), file_name: str = Form(...)):
+    try:
+        folder_path = f"user_project/{username}/{project_name}/images"
+        file_path = os.path.join(folder_path, file_name)
+        return FileResponse(file_path)
+    except Exception as e:
+        return JSONResponse(content={"error": f"Failed to get image URLs: {e}"}, status_code=500)
+   
+    
 @app.post("/train/")
 async def train_model(
     bytefiles: List[UploadFile] = File(...),

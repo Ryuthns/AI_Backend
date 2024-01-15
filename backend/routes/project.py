@@ -36,7 +36,7 @@ async def crea_project(body: Project):
     create_project(data["project_type"], data["project_name"], data["username"])
     return Response(status_code=201, content="Project created successfully")  
 
-@router.delete("/{project_name}")
+@router.delete("/delete")
 async def del_project(username, project_name):
     result = delete_project(username, project_name)
     if result.deleted_count == 0:
