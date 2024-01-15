@@ -5,6 +5,7 @@ from fastapi import FastAPI, File, Response, UploadFile, Form, Depends
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from classification import TrainClassification
+from helpers.helper import get_key_by_value
 from models.ai_models import result_input
 
 from routes.user import router as UserRouter
@@ -14,6 +15,7 @@ from routes.project import router as ProjectRouter
 app = FastAPI()
 
 origins = ["*"]
+mapping = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,7 +46,7 @@ async def get_result(result_data: result_input):
     c = TrainClassification(
         2, data["username"], data["project_name"], data["modelname"]
     )
-    result = await c._load_train_result()
+    result = c._load_train_result()
     if not result:
         return Response("failed to get result", status_code=404)
     return result
@@ -61,7 +63,11 @@ async def create_upload_file(
     bytefile_data = [bf.file for bf in bytefiles]
     c = TrainClassification(num_class, username, project_name, modelname)
     result = c.predict(bytefile_data)
-    print(result)
+    predicted_labels = []
+    for p in result["predicted"]:
+        print(get_key_by_value(mapping, p))
+        predicted_labels.append(get_key_by_value(mapping, p))
+    result["predicted_labels"] = predicted_labels
     return result
 
 @app.post("/saveimage/")
@@ -119,7 +125,6 @@ async def train_model(
     project_name: str = Form(...),
     modelname: str = Form(...),
 ):
-    mapping = {}
     # Convert UploadFile objects to BinaryIO
     bytefile_data = [bf.file for bf in bytefiles]
     print(bytefile_data)
@@ -138,7 +143,7 @@ async def train_model(
 
     # Call the train method with the received data
     c = TrainClassification(len(set(label_list)), username, project_name, modelname)
-    result = await c.train(bytefile_data, label_list, epochs, lr)
+    result = c.train(bytefile_data, label_list, epochs, lr)
     global result_data
     result_data = result
 
