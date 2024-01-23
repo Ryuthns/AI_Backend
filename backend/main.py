@@ -10,6 +10,7 @@ from helpers.helper import get_key_by_value
 from models.ai_models import result_input
 
 from routes.user import router as UserRouter
+from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
 
 
@@ -28,6 +29,7 @@ app.add_middleware(
 
 app.include_router(UserRouter, prefix="/user")
 app.include_router(ProjectRouter, prefix="/project")
+app.include_router(ModelsRouter, prefix="/model")
 result_data = {}
 
 
@@ -71,39 +73,50 @@ async def create_upload_file(
     result["predicted_labels"] = predicted_labels
     return result
 
+
 @app.post("/saveimage/")
-async def save_image(bytefiles: List[UploadFile] = File(...), username : str = Form(...), project_name : str = Form(...), labels : List[str] = Form(...) ):
-    # Save user's labels and images 
+async def save_image(
+    bytefiles: List[UploadFile] = File(...),
+    username: str = Form(...),
+    project_name: str = Form(...),
+    labels: List[str] = Form(...),
+):
+    # Save user's labels and images
     try:
-        #save labels
+        # save labels
         filename_list = [file.filename for file in bytefiles]
         label_list = [labels[i] for i in range(len(labels))]
-        data = [{"image": filename, "annotations": [label]} for filename, label in zip(filename_list, label_list)]
+        data = [
+            {"image": filename, "annotations": [label]}
+            for filename, label in zip(filename_list, label_list)
+        ]
         json_data = json.dumps(data, indent=2)
-        
+
         directory_path = f"user_project/{username}/{project_name}/labels"
         os.makedirs(directory_path, exist_ok=True)
         file_path = os.path.join(directory_path, "classification.json")
-        
+
         with open(file_path, "w") as json_file:
             json_file.write(json_data)
-        
-        #save images
-        for file in bytefiles:  
+
+        # save images
+        for file in bytefiles:
             directory_path = f"user_project/{username}/{project_name}/images"
-            
 
             os.makedirs(directory_path, exist_ok=True)
-            
+
             file_path = os.path.join(directory_path, file.filename)
-            
+
             with open(file_path, "wb") as f:
                 f.write(file.file.read())
-        
+
         return Response("Files saved successfully", status_code=200)
     except Exception as e:
-        return Response(f"failed to save image(s) and label(s) {e.args}", status_code=404)
-    
+        return Response(
+            f"failed to save image(s) and label(s) {e.args}", status_code=404
+        )
+
+
 @app.get("/getimage/")
 async def get_images(username: str = Form(...), project_name: str = Form(...)):
     try:
@@ -114,35 +127,45 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
             for file in files:
                 file_path = os.path.join(root, file)
                 # Assuming all files in the folder are images
-                image_urls.append(f"http://localhost:8000/image/?username={username}&project_name={project_name}&file_name={file}")  # Replace with your actual API server URL
-                
+                image_urls.append(
+                    f"http://localhost:8000/image/?username={username}&project_name={project_name}&file_name={file}"
+                )  # Replace with your actual API server URL
+
         file_path = f"user_project/{username}/{project_name}/labels/classification.json"
         with open(file_path, "r") as f:
             label = json.load(f)
-            
-                
+
         response_data = {
             "username": username,
             "project_name": project_name,
             "image_urls": image_urls,
-            "labels": label
+            "labels": label,
         }
 
         return JSONResponse(content=response_data)
 
     except Exception as e:
-        return JSONResponse(content={"error": f"Failed to get image URLs: {e}"}, status_code=500)
-    
+        return JSONResponse(
+            content={"error": f"Failed to get image URLs: {e}"}, status_code=500
+        )
+
+
 @app.get("/image/")
-async def get_images(username: str = Query(...), project_name: str = Query(...), file_name: str = Query(...)):
+async def get_images(
+    username: str = Query(...),
+    project_name: str = Query(...),
+    file_name: str = Query(...),
+):
     try:
         folder_path = f"user_project/{username}/{project_name}/images"
         file_path = os.path.join(folder_path, file_name)
         return FileResponse(file_path)
     except Exception as e:
-        return JSONResponse(content={"error": f"Failed to get image URLs: {e}"}, status_code=500)
-   
-    
+        return JSONResponse(
+            content={"error": f"Failed to get image URLs: {e}"}, status_code=500
+        )
+
+
 @app.post("/train/")
 async def train_model(
     bytefiles: List[UploadFile] = File(...),
@@ -156,7 +179,7 @@ async def train_model(
     # Convert UploadFile objects to BinaryIO
     bytefile_data = [bf.file for bf in bytefiles]
     print(bytefile_data)
-    
+
     # Convert the labels to integers
     label_list = []
     for value in labels:

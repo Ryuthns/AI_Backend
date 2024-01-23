@@ -134,7 +134,7 @@ class TrainClassification:
 
         filename = self.get_model_path()
 
-        torch.save(self.model.state_dict(), filename)
+        torch.save(self.model, filename)
         print("Finished Training and saved the model")
 
         result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
@@ -160,8 +160,10 @@ class TrainClassification:
 
     def _load_model(self):
         model_path = self.get_model_path()
+        print("load models", model_path)
         if os.path.exists(model_path):
-            self.model.load_state_dict(torch.load(model_path))
+            self.model = torch.load(model_path)
+            print("load models success!!")
             return
         if os.path.exists("mobilenet_v2_trained.pth"):
             self.model.load_state_dict(torch.load("mobilenet_v2_trained.pth"))
@@ -181,6 +183,7 @@ class TrainClassification:
 
     def predict(self, bytefile: Union[List[BinaryIO], None] = None, filename=""):
         self._load_model()
+        self.model.eval()
 
         if bytefile is None:
             return {}
