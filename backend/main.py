@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from classification import TrainClassification
 from helpers.helper import get_key_by_value
 from models.ai_models import result_input
-from objectdetection import ObjectDetection
+from objectdetection import ObjectDetection, save_predict_img
 from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
 from routes.user import router as UserRouter
@@ -203,7 +203,7 @@ async def train_model(
     return result
 
 
-@app.post("/object_train/")
+@app.post("/object/train")
 def object_detection_train(
     username: str = Form(...),
     project_name: str = Form(...),
@@ -212,6 +212,20 @@ def object_detection_train(
 ):
     obj = ObjectDetection(username, project_name, modelname)
     result = obj.train(epochs)
+    return result
+
+
+@app.post("/object/predict")
+def object_detection_predict(
+    bytefiles: List[UploadFile] = File(...),
+    username: str = Form(...),
+    project_name: str = Form(...),
+    modelname: str = Form(...),
+):
+    bytefile_data = [bf.file for bf in bytefiles]
+    c = ObjectDetection(username, project_name, modelname)
+    save_predict_img(bytefile_data, username, project_name)
+    result = c.predict()
     return result
 
 
