@@ -1,11 +1,10 @@
 import os
-from typing import List
-import numpy as np
-import matplotlib.pyplot as plt
-import cv2
-from ultralytics import YOLO
 import pathlib
 import shutil
+from typing import List
+import pandas as pd
+
+from ultralytics import YOLO
 
 
 def prepare_yaml(username, project_name, class_list: List[str]):
@@ -35,19 +34,32 @@ class ObjectDetection:
 
     def working_path(self):
         current_path = pathlib.Path().resolve()
-        return os.path.join(
+        path = os.path.join(
             current_path, "user_project", self.username, self.project_name
         )
+        return path
 
     def remove_old_model(self):
-        path = os.path.join(self.working_path(), self.model_name)
+        path = os.path.join(self.working_path(), "models", self.model_name)
+        if not (os.path.exists(path) and os.path.isdir(path)):
+            return
         shutil.rmtree(path)
         print(f"Folder '{path}' removed successfully.")
+
+    def read_result(self):
+        result_path = os.path.join(
+            self.working_path(), "models", self.model_name, "results.csv"
+        )
+        df = pd.read_csv(result_path)
+        df.columns = df.columns.str.strip()
+        return df
 
     def train(self, epoch: int = 20):
         model = YOLO("yolov8n.pt")
 
+        self.remove_old_model()
         w_path = self.working_path()
+        model_name = "models/" + self.model_name
         yaml_path = os.path.join(w_path, "data.yaml")
         print(yaml_path)
         train_result = model.train(
@@ -55,11 +67,19 @@ class ObjectDetection:
             epochs=epoch,
             imgsz=224,
             project=w_path,
-            name=self.model_name,
+            name=model_name,
         )
+
+        model.export(format="onnx")
+
+        df = self.read_result()
+        result = {}
+        result["loss"] = df["train/box_loss"].to_list()
+        return result
 
 
 if __name__ == "__main__":
-    obj = ObjectDetection("user2", "project1", "model1")
+    obj = ObjectDetection("user2", "project1", "model2")
     prepare_yaml("user2", "project1", ["box", "person", "table"])
-    obj.train()
+    result = obj.train(epoch=10)
+    print(result)

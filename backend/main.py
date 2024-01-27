@@ -1,18 +1,19 @@
-import uvicorn
-import os
 import json
-from typing import Union, List, BinaryIO
-from fastapi import FastAPI, File, Response, UploadFile, Form, Depends, Query
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+import os
+from typing import BinaryIO, List, Union
+
+import uvicorn
+from fastapi import Depends, FastAPI, File, Form, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+
 from classification import TrainClassification
 from helpers.helper import get_key_by_value
 from models.ai_models import result_input
-
-from routes.user import router as UserRouter
+from objectdetection import ObjectDetection
 from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
-
+from routes.user import router as UserRouter
 
 app = FastAPI()
 
@@ -151,7 +152,7 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
 
 
 @app.get("/image/")
-async def get_images(
+async def get_image(
     username: str = Query(...),
     project_name: str = Query(...),
     file_name: str = Query(...),
@@ -199,6 +200,18 @@ async def train_model(
     result_data = result
 
     # Return the result as JSON
+    return result
+
+
+@app.post("/object_train/")
+def object_detection_train(
+    username: str = Form(...),
+    project_name: str = Form(...),
+    modelname: str = Form(...),
+    epochs: int = Form(...),
+):
+    obj = ObjectDetection(username, project_name, modelname)
+    result = obj.train(epochs)
     return result
 
 
