@@ -12,7 +12,12 @@ async def get_models(project_name: str = "", username: str = ""):
     if project_name == "" or username == "":
         return Response("invalid input", status_code=401)
     path = f"user_project/{username}/{ project_name }/models"
-    return os.listdir(path)
+    model_list = os.listdir(path)
+    result = []
+    for i, model_name in enumerate(model_list):
+        data = {"_id": i, "model_name": model_name}
+        result.append(data)
+    return result
 
 
 @router.post("/")
