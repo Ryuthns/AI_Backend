@@ -1,6 +1,7 @@
 FROM python:3.9.17-slim-buster
 WORKDIR /app
 COPY ./requirements.txt .
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 RUN pip install -r requirements.txt
 COPY . /app
 
