@@ -3,8 +3,29 @@ import pathlib
 import shutil
 from typing import List
 import pandas as pd
+from torch import mode
 
 from ultralytics import YOLO
+
+
+def save_image(file, folder_path):
+    if not (os.path.exists(folder_path) and os.path.isdir(folder_path)):
+        os.makedirs(folder_path, exist_ok=True)
+
+    file_path = os.path.join(folder_path, file.filename)
+
+    with open(file_path, "wb") as f:
+        f.write(file.file.read())
+    return file_path
+
+
+def save_predict_img(images, username, project_name):
+    current_path = pathlib.Path().resolve()
+    w_path = os.path.join(current_path, "user_project", username, project_name)
+    predict_path = os.path.join(w_path, "predict")
+    shutil.rmtree(predict_path)
+    for im in images:
+        save_image(im, predict_path)
 
 
 def prepare_yaml(username, project_name, class_list: List[str]):
@@ -77,9 +98,28 @@ class ObjectDetection:
         result["loss"] = df["train/box_loss"].to_list()
         return result
 
+    def predict(self):
+        model_path = os.path.join(
+            self.working_path(), "models", self.model_name, "weights", "best.pt"
+        )
+        model = YOLO(model_path)
+
+        predict_path = os.path.join(self.working_path(), "predict")
+        results = model.predict(source=predict_path)
+        output = []
+        for r in results:
+            o = {}
+            o["boxes"] = r.boxes.xyxy.tolist()
+            o["classes"] = r.boxes.cls.tolist()
+            o["path"] = r.path.split("/")[-1]
+            output.append(o)
+        return output
+
 
 if __name__ == "__main__":
-    obj = ObjectDetection("user2", "project1", "model2")
-    prepare_yaml("user2", "project1", ["box", "person", "table"])
-    result = obj.train(epoch=10)
-    print(result)
+    obj = ObjectDetection("user2", "project2", "model1")
+    # prepare_yaml("user2", "project2", ["no_mask", "mask"])
+    # result = obj.train(epoch=50)
+    # print(result)
+    results = obj.predict()
+    print(results)
