@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, File, Form, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from classification import TrainClassification
+from classification import TrainClassification, get_labels_dict
 from helpers.helper import get_key_by_value
 from models.ai_models import result_input
 from objectdetection import ObjectDetection, save_predict_img
@@ -68,6 +68,8 @@ async def create_upload_file(
     c = TrainClassification(num_class, username, project_name, modelname)
     result = c.predict(bytefile_data)
     predicted_labels = []
+    folder_path = os.path.join("user_project", username, project_name)
+    mapping = get_labels_dict(folder_path)
     for p in result["predicted"]:
         print(get_key_by_value(mapping, p))
         predicted_labels.append(get_key_by_value(mapping, p))
@@ -118,7 +120,7 @@ async def save_image(
         )
 
 
-@app.get("/getimage/")
+@app.post("/getimage/")
 async def get_images(username: str = Form(...), project_name: str = Form(...)):
     try:
         folder_path = f"user_project/{username}/{project_name}/images"
@@ -169,33 +171,17 @@ async def get_image(
 
 @app.post("/train/")
 async def train_model(
-    bytefiles: List[UploadFile] = File(...),
-    labels: List[str] = Form(...),
+    # bytefiles: List[UploadFile] = File(...),
+    # labels: List[str] = Form(...),
     epochs: int = Form(...),
     lr: float = Form(...),
     username: str = Form(...),
     project_name: str = Form(...),
     modelname: str = Form(...),
 ):
-    # Convert UploadFile objects to BinaryIO
-    bytefile_data = [bf.file for bf in bytefiles]
-    print(bytefile_data)
-
-    # Convert the labels to integers
-    label_list = []
-    for value in labels:
-        if value in mapping:
-            integer_index = mapping[value]
-        else:
-            # If the value is not in the dictionary, add it with a new integer index
-            new_index = len(mapping)
-            mapping[value] = new_index
-            integer_index = new_index
-        label_list.append(integer_index)
-
     # Call the train method with the received data
-    c = TrainClassification(len(set(label_list)), username, project_name, modelname)
-    result = c.train(bytefile_data, label_list, epochs, lr)
+    c = TrainClassification(len(set([])), username, project_name, modelname)
+    result = c.train(epochs, lr)
     global result_data
     result_data = result
 
@@ -222,9 +208,9 @@ def object_detection_predict(
     project_name: str = Form(...),
     modelname: str = Form(...),
 ):
-    bytefile_data = [bf.file for bf in bytefiles]
+    # bytefile_data = [bf.file for bf in bytefiles]
     c = ObjectDetection(username, project_name, modelname)
-    save_predict_img(bytefile_data, username, project_name)
+    save_predict_img(bytefiles, username, project_name)
     result = c.predict()
     return result
 

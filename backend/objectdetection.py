@@ -25,6 +25,7 @@ def save_predict_img(images, username, project_name):
     predict_path = os.path.join(w_path, "predict")
     shutil.rmtree(predict_path)
     for im in images:
+        print(im.__dir__())
         save_image(im, predict_path)
 
 
