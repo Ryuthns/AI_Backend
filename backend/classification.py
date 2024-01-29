@@ -8,22 +8,62 @@ import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
 from torch.utils.data import DataLoader, TensorDataset
+from os import listdir, path
 from torchvision import transforms
+
+
+def get_labels_dict(folder_path):
+    labels_path = os.path.join(folder_path, "labels/classification.json")
+    with open(labels_path, "r") as path:
+        data = json.load(path)
+    # labels_list = data.map(lambda x: x["annotations"][0])
+    labels_list = [x["annotations"][0] for x in data]
+    # Get unique labels
+    unique_labels = list(set(labels_list))
+
+    # Create a mapping from labels to numeric indices
+    result = {label: index for index, label in enumerate(unique_labels)}
+    return result
+
+
+def read_json_and_get_image_bytes(json_file_path, images_folder_path):
+    with open(json_file_path, "r") as json_file:
+        data = json.load(json_file)
+
+    image_bytes_list = []
+    labels_list = []
+
+    for item in data:
+        image_filename = item["image"]
+        image_path = path.join(images_folder_path, image_filename)
+
+        try:
+            with open(image_path, "rb") as image_file:
+                image_bytes = image_file.read()
+                image_bytes_list.append(image_bytes)
+                labels_list.append(item["annotations"][0])
+        except FileNotFoundError:
+            print(f"Image file not found: {image_path}")
+
+    return image_bytes_list, labels_list
 
 
 class TrainClassification:
     def __init__(
         self, num_classes: int, username: str, project_name: str, model_name: str
     ):
-        self.model = torch.hub.load(
-            "pytorch/vision:v0.10.0", "mobilenet_v2", pretrained=True
-        )
         self.username = username
         self.project_name = project_name
         self.model_name = model_name
+        self.num_classes = num_classes
 
         self.criterion = nn.CrossEntropyLoss()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def prepare_model(self):
+        self.model = torch.hub.load(
+            "pytorch/vision:v0.10.0", "mobilenet_v2", pretrained=True
+        )
         self.model.to(self.device)
         # Freeze all layers
         for param in self.model.parameters():
@@ -34,7 +74,7 @@ class TrainClassification:
             1
         ].in_features  # Number of input features to the final layer
         self.model.classifier[1] = nn.Linear(
-            in_features, num_classes
+            in_features, self.num_classes
         )  # Replace the final layer
 
         for param in self.model.classifier[1].parameters():
@@ -69,13 +109,17 @@ class TrainClassification:
 
     def train(
         self,
-        bytefiles: Union[List[BinaryIO], None],
-        labels: List[int],
         epochs: int,
         lr: float,
     ):
-        if bytefiles is None or labels is None:
-            return
+        # if bytefiles is None or labels is None:
+        #     return
+
+        labels_path = f"user_project/{self.username}/{self.project_name}/labels/classification.json"
+        images_path = f"user_project/{self.username}/{self.project_name}/images"
+        bytefiles, labels = read_json_and_get_image_bytes(labels_path, images_path)
+        self.num_classes = len(set(labels))
+        self.prepare_model()
 
         preprocess = transforms.Compose(
             [
@@ -90,12 +134,14 @@ class TrainClassification:
 
         images = []
         for bf in bytefiles:
-            image = Image.open(io.BytesIO(bf.read()))
+            image = Image.open(io.BytesIO(bf))
             input_tensor = preprocess(image)
             images.append(input_tensor)
 
+        print(images[0].shape, labels)
         print("labels:", labels)
         print("n labels", self.change_to_num_labels(labels))
+        labels = self.change_to_num_labels(labels)
         train_dataset = TensorDataset(torch.stack(images), torch.Tensor(labels).long())
         train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
 
@@ -110,8 +156,10 @@ class TrainClassification:
 
             for i, data in enumerate(train_loader, 0):
                 inputs, label = data
+                print("input: ", inputs.shape, label)
                 optimizer.zero_grad()
                 outputs = self.model(inputs)
+                print("output: ", outputs, label)
                 loss = self.criterion(outputs, label)
                 loss.backward()
                 optimizer.step()
