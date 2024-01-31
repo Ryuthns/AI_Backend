@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from typing import BinaryIO, List, Union
 
 import uvicorn
@@ -150,6 +151,18 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
     except Exception as e:
         return JSONResponse(
             content={"error": f"Failed to get image URLs: {e}"}, status_code=500
+        )
+
+
+@app.delete("/deletefolder/")
+async def delete_folder(username: str, project_name: str):
+    try:
+        folder_path = f"user_project/{username}/{project_name}"
+        shutil.rmtree(folder_path)
+        return Response("Folder deleted successfully", status_code=200)
+    except Exception as e:
+        return Response(
+            f"Failed to delete folder {e.args}", status_code=404
         )
 
 
