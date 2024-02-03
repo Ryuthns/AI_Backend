@@ -80,7 +80,8 @@ async def create_upload_file(
 
 @app.post("/saveimage/")
 async def save_image(
-    bytefiles: List[UploadFile] = File(...),
+    file_name: List[str] = Form(...),
+    image_file: List[UploadFile] = File(None),
     username: str = Form(...),
     project_name: str = Form(...),
     labels: List[str] = Form(...),
@@ -88,13 +89,13 @@ async def save_image(
     # Save user's labels and images
     try:
         # save labels
-        filename_list = [file.filename for file in bytefiles]
         label_list = [labels[i] for i in range(len(labels))]
         data = [
             {"image": filename, "annotations": [label]}
-            for filename, label in zip(filename_list, label_list)
+            for filename, label in zip(file_name, label_list)
         ]
-        json_data = json.dumps(data, indent=2)
+        sorted_data = sorted(data, key=lambda x: x["image"])
+        json_data = json.dumps(sorted_data, indent=2)
 
         directory_path = f"user_project/{username}/{project_name}/labels"
         os.makedirs(directory_path, exist_ok=True)
@@ -103,21 +104,23 @@ async def save_image(
         with open(file_path, "w") as json_file:
             json_file.write(json_data)
 
-        # save images
-        for file in bytefiles:
-            directory_path = f"user_project/{username}/{project_name}/images"
+        # save 
+        if image_file is not None:
+            for file in image_file:
+                directory_path = f"user_project/{username}/{project_name}/images"
 
-            os.makedirs(directory_path, exist_ok=True)
+                os.makedirs(directory_path, exist_ok=True)
 
-            file_path = os.path.join(directory_path, file.filename)
+                file_path = os.path.join(directory_path, file.filename)
 
-            with open(file_path, "wb") as f:
-                f.write(file.file.read())
+                with open(file_path, "wb") as f:
+                    f.write(file.file.read())
+            return Response("File(s) saved successfully", status_code=200)
 
-        return Response("Files saved successfully", status_code=200)
+        return Response("Label(s) updated successfully", status_code=200)
     except Exception as e:
         return Response(
-            f"failed to save image(s) and label(s) {e.args}", status_code=404
+            f"Failed to save image(s) and label(s) {e.args}", status_code=404
         )
 
 
