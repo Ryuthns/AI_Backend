@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import threading
 from typing import BinaryIO, List, Union
 
 import uvicorn
@@ -15,11 +16,14 @@ from objectdetection import ObjectDetection, save_predict_img
 from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
 from routes.user import router as UserRouter
+import queue
 
 app = FastAPI()
 
 origins = ["*"]
 mapping = {}
+
+main_queue = queue.Queue(maxsize=0)
 
 app.add_middleware(
     CORSMiddleware,
@@ -164,9 +168,7 @@ async def delete_folder(username: str, project_name: str):
         shutil.rmtree(folder_path)
         return Response("Folder deleted successfully", status_code=200)
     except Exception as e:
-        return Response(
-            f"Failed to delete folder {e.args}", status_code=404
-        )
+        return Response(f"Failed to delete folder {e.args}", status_code=404)
 
 
 @app.get("/image/")
@@ -197,12 +199,13 @@ async def train_model(
 ):
     # Call the train method with the received data
     c = TrainClassification(len(set([])), username, project_name, modelname)
-    result = c.train(epochs, lr)
-    global result_data
-    result_data = result
+    threading.Thread(target=c.train, args=(epochs, lr)).start()
+    # result = c.train(epochs, lr)
+    # global result_data
+    # result_data = result
 
     # Return the result as JSON
-    return result
+    return "running"
 
 
 @app.post("/object/train")
@@ -213,8 +216,9 @@ def object_detection_train(
     epochs: int = Form(...),
 ):
     obj = ObjectDetection(username, project_name, modelname)
+    # threading.Thread(target=obj.train, args=(epochs,)).start()
     result = obj.train(epochs)
-    return result
+    return "running"
 
 
 @app.post("/object/predict")
