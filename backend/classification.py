@@ -1,14 +1,14 @@
 import io
-import os
-from typing import BinaryIO, List, Tuple, Union
 import json
+import os
+from os import listdir, path
+from typing import BinaryIO, Callable, List, Tuple, Union, Optional
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
 from torch.utils.data import DataLoader, TensorDataset
-from os import listdir, path
 from torchvision import transforms
 
 
@@ -107,11 +107,7 @@ class TrainClassification:
         path = f"{self.username}/{self.project_name}/labels/lebel.txt"
         return path
 
-    def train(
-        self,
-        epochs: int,
-        lr: float,
-    ):
+    async def train(self, epochs: int, lr: float, on_success=None):
         # if bytefiles is None or labels is None:
         #     return
 
@@ -187,6 +183,9 @@ class TrainClassification:
 
         result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
         self._save_train_result(result)
+        if on_success is not None:
+            print("on success process")
+            await on_success()
         return result
 
     def _save_train_result(self, result):

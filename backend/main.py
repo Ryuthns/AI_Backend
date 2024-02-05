@@ -1,13 +1,24 @@
 import json
 import os
+import queue
 import shutil
 import threading
-from typing import BinaryIO, List, Union
+from typing import Dict, List, Union
+import asyncio
 
 import uvicorn
-from fastapi import Depends, FastAPI, File, Form, Query, Response, UploadFile
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    Query,
+    Response,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from classification import TrainClassification, get_labels_dict
 from helpers.helper import get_key_by_value
@@ -16,7 +27,6 @@ from objectdetection import ObjectDetection, save_predict_img
 from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
 from routes.user import router as UserRouter
-import queue
 
 app = FastAPI()
 
@@ -24,6 +34,9 @@ origins = ["*"]
 mapping = {}
 
 main_queue = queue.Queue(maxsize=0)
+
+# Dictionary to store WebSocket connections for each channel
+channel_connections: Dict[str, WebSocket] = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -108,7 +121,7 @@ async def save_image(
         with open(file_path, "w") as json_file:
             json_file.write(json_data)
 
-        # save 
+        # save
         if image_file is not None:
             for file in image_file:
                 directory_path = f"user_project/{username}/{project_name}/images"
@@ -199,10 +212,15 @@ async def train_model(
 ):
     # Call the train method with the received data
     c = TrainClassification(len(set([])), username, project_name, modelname)
-    threading.Thread(target=c.train, args=(epochs, lr)).start()
+    on_successs = lambda: send_message_to_channel(
+        f"{username}_{project_name}", {"training_status": "success"}
+    )
+    print("channel", f"{username}_{project_name}")
+    # threading.Thread(target=c.train, args=(epochs, lr, on_successs)).start()
+    threading.Thread(
+        target=wrap_async_func, args=(c.train, epochs, lr, on_successs)
+    ).start()
     # result = c.train(epochs, lr)
-    # global result_data
-    # result_data = result
 
     # Return the result as JSON
     return "running"
@@ -233,6 +251,55 @@ def object_detection_predict(
     save_predict_img(bytefiles, username, project_name)
     result = c.predict()
     return result
+
+
+@app.websocket("/ws/{channel}")
+async def websocket_endpoint(websocket: WebSocket, channel: str):
+    await websocket.accept()
+
+    # Store the WebSocket connection in the dictionary
+    channel_connections[channel] = websocket
+
+    try:
+        while True:
+            # Receive message from the client
+            data = await websocket.receive_text()
+
+            # # Broadcast the message to all clients in the same channel
+            # await send_message_to_channel(channel, f"Channel {channel}: {data}")
+    except WebSocketDisconnect:
+        # Remove the WebSocket connection when the client disconnects
+        del channel_connections[channel]
+
+
+async def broadcast(channel: str, message: str):
+    # Send the message to all clients in the specified channel
+    for connection in channel_connections.values():
+        if connection:
+            await connection.send_text(message)
+
+
+async def send_message_to_channel(channel: str, message: Union[str, Dict[str, str]]):
+    # Check if the channel exists in the dictionary
+    print("message: ", message)
+    if channel in channel_connections:
+        connection = channel_connections[channel]
+
+        # Check if the connection is open
+        if connection:
+            # Send the message to the specific channel
+            if type(message) is str:
+                await connection.send_text(message)
+            else:
+                await connection.send_json(message)
+        else:
+            print(f"Connection for channel {channel} is not open.")
+    else:
+        print(f"Channel {channel} not found.")
+
+
+def wrap_async_func(func, *args):
+    asyncio.run(func(*args))
 
 
 if __name__ == "__main__":
