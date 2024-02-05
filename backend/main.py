@@ -148,6 +148,7 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
 
         image_urls = []
         for root, _, files in os.walk(folder_path):
+            files.sort()
             for file in files:
                 file_path = os.path.join(root, file)
                 # Assuming all files in the folder are images
