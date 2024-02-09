@@ -16,6 +16,7 @@ from fastapi import (
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
+    HTTPException,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -121,7 +122,7 @@ async def save_image(
         with open(file_path, "w") as json_file:
             json_file.write(json_data)
 
-        # save
+        # save images
         if image_file is not None:
             for file in image_file:
                 directory_path = f"user_project/{username}/{project_name}/images"
@@ -139,6 +140,50 @@ async def save_image(
         return Response(
             f"Failed to save image(s) and label(s) {e.args}", status_code=404
         )
+        
+        
+@app.post("/saveobject/")
+async def save_object(
+    image_file: List[UploadFile] = File(None),
+    username: str = Form(...),
+    project_name: str = Form(...),
+    labels: str = Form(...),
+):
+    try:
+        # Save labels
+        labels_dict: Dict[str, str] = json.loads(labels)
+        labels_directory = f"user_project/{username}/{project_name}/labels"
+        os.makedirs(labels_directory, exist_ok=True)
+        for key, value in labels_dict.items():
+            file_name, _ = os.path.splitext(key)
+            labels_path = os.path.join(labels_directory, f"{file_name}.txt")
+            
+            with open(labels_path, "w") as json_file:
+                # Write each bounding box annotation as a separate line
+                for annotation in value:
+                    json_file.write(annotation + "\n")
+
+        # Save images
+        if image_file is not None:
+            images_directory = f"user_project/{username}/{project_name}/images"
+            os.makedirs(images_directory, exist_ok=True)
+            
+            for file in image_file:
+                # Use a different variable for the images directory path
+                image_directory_path = f"user_project/{username}/{project_name}/images"
+                
+                image_path = os.path.join(image_directory_path, file.filename)
+                with open(image_path, "wb") as f:
+                    f.write(file.file.read())
+
+            return Response("Image(s) saved successfully", status_code=200)
+
+        return Response("Label(s) updated successfully", status_code=200)
+    
+    except Exception as e:
+        return Response(f"Failed to save image(s) and label(s): {str(e)}", status_code=500)
+
+
 
 
 @app.post("/getimage/")
@@ -175,6 +220,48 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
         )
 
 
+@app.post("/getobject/")
+async def get_object(username: str = Form(...), project_name: str = Form(...)):
+    try:
+        folder_path = f"user_project/{username}/{project_name}/images"
+
+        response_data = {
+            "username": username,
+            "project_name": project_name,
+            "images": []
+        }
+
+        for root, _, files in os.walk(folder_path):
+            files.sort()
+            for file in files:
+                image_url = f"http://localhost:8000/image/?username={username}&project_name={project_name}&file_name={file}"
+                file_name, _ = os.path.splitext(file)
+                label_file_path = f"user_project/{username}/{project_name}/labels/{file_name}.txt"
+
+                # Read the plain text file for labels
+                try:
+                    with open(label_file_path, "r") as f:
+                        lines = f.readlines()
+                        labels = [line.strip() for line in lines if line.strip()]  # Filter out empty lines
+                except FileNotFoundError:
+                    labels = []  # Handle the case where the label file is not found
+
+                image_data = {
+                    "filename": file,
+                    "url": image_url,
+                    "labels": labels
+                }
+                response_data["images"].append(image_data)
+
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get image URLs and labels: {str(e)}"
+        )
+    
+
 @app.delete("/deletefolder/")
 async def delete_folder(username: str, project_name: str):
     try:
@@ -182,7 +269,7 @@ async def delete_folder(username: str, project_name: str):
         shutil.rmtree(folder_path)
         return Response("Folder deleted successfully", status_code=200)
     except Exception as e:
-        return Response(f"Failed to delete folder {e.args}", status_code=404)
+        return Response(f"Failed to delete folder {e.args}", status_code=500)
 
 
 @app.get("/image/")
