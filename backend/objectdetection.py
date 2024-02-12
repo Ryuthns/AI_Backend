@@ -2,10 +2,50 @@ import os
 import pathlib
 import shutil
 from typing import List
-import pandas as pd
-from torch import mode
+import json
 
+import pandas as pd
 from ultralytics import YOLO
+
+
+def _on_train_epoch_end(pred, username, project_name, model_name):
+    loss = pred.loss.item()
+    print("on_train_epoch_end loss", pred.loss)
+    fitness = pred.fitness
+    path = get_model_folder(username, project_name, model_name)
+    result_path = os.path.join(path, "result.json")
+    if fitness is None:
+        fitness = 0
+    if os.path.exists(result_path):
+        with open(result_path, "r+") as file:
+            data = json.load(file)  # Load existing data if the file already exists
+
+            data["accuracy"].append(fitness)  # Append the new fitness value
+            data["loss"].append(loss)  # Append the new loss value
+
+            file.seek(0)  # Move to the beginning of the file
+            json.dump(data, file)
+    else:
+        data = {"loss": [], "accuracy": []}
+        data["accuracy"].append(fitness)
+        data["loss"].append(loss)
+        _save_train_result(data, result_path)
+    return
+
+
+def _save_train_result(result, path):
+    # Save to JSON file
+    with open(path, "w") as json_file:
+        json.dump(result, json_file)
+
+
+def get_model_folder(username, project_name, model_name):
+    current_path = pathlib.Path().resolve()
+    folder_path = f"user_project/{username}/{project_name}/models/{model_name}"
+    folder_path = os.path.join(current_path, folder_path)
+    if not (os.path.exists(folder_path) and os.path.isdir(folder_path)):
+        os.makedirs(folder_path)
+    return folder_path
 
 
 def save_image(file, folder_path):
@@ -80,6 +120,12 @@ class ObjectDetection:
     async def train(self, epoch: int = 20, on_success=None):
         model = YOLO("yolov8n.pt")
 
+        model.add_callback(
+            "on_train_epoch_end",
+            lambda pred: _on_train_epoch_end(
+                pred, self.username, self.project_name, self.model_name
+            ),
+        )
         self.remove_old_model()
         w_path = self.working_path()
         model_name = "models/" + self.model_name
@@ -115,7 +161,8 @@ class ObjectDetection:
         predict_path = os.path.join(self.working_path(), "predict")
         results = model.predict(source=predict_path)
         print("-" * 20)
-        print("model path:", results)
+        print("model path:", model_path)
+        print("model info", model.info())
         print("-" * 20)
         output = []
         for r in results:
