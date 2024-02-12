@@ -195,7 +195,7 @@ async def save_object(
 
 
 @app.post("/getimage/")
-async def get_images(username: str = Form(...), project_name: str = Form(...)):
+async def get_images(username: str = Form(...), project_name: str = Form(...), address: str = Form(...)):
     try:
         folder_path = f"user_project/{username}/{project_name}/images"
 
@@ -206,7 +206,7 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
                 file_path = os.path.join(root, file)
                 # Assuming all files in the folder are images
                 image_urls.append(
-                    f"http://localhost:8000/image/?username={username}&project_name={project_name}&file_name={file}"
+                    f"{address}/image/?username={username}&project_name={project_name}&file_name={file}"
                 )  # Replace with your actual API server URL
 
         file_path = f"user_project/{username}/{project_name}/labels/classification.json"
@@ -229,7 +229,7 @@ async def get_images(username: str = Form(...), project_name: str = Form(...)):
 
 
 @app.post("/getobject/")
-async def get_object(username: str = Form(...), project_name: str = Form(...)):
+async def get_object(username: str = Form(...), project_name: str = Form(...), address: str = Form(...)):
     try:
         folder_path = f"user_project/{username}/{project_name}/images"
 
@@ -239,11 +239,11 @@ async def get_object(username: str = Form(...), project_name: str = Form(...)):
             "images": [],
             "classnames": [],
         }
-
+        
         for root, _, files in os.walk(folder_path):
             files.sort()
             for file in files:
-                image_url = f"http://localhost:8000/image/?username={username}&project_name={project_name}&file_name={file}"
+                image_url = f"{address}/image/?username={username}&project_name={project_name}&file_name={file}"
                 file_name, _ = os.path.splitext(file)
                 label_file_path = (
                     f"user_project/{username}/{project_name}/labels/{file_name}.txt"
