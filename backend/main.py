@@ -149,31 +149,39 @@ async def save_object(
     username: str = Form(...),
     project_name: str = Form(...),
     labels: str = Form(...),
+    classnames: str = Form(...),
 ):
     try:
-        # Save labels
+        # Save labels for each image
         labels_dict: Dict[str, str] = json.loads(labels)
         labels_directory = f"user_project/{username}/{project_name}/labels"
         os.makedirs(labels_directory, exist_ok=True)
         for key, value in labels_dict.items():
             file_name, _ = os.path.splitext(key)
             labels_path = os.path.join(labels_directory, f"{file_name}.txt")
-
+            
             with open(labels_path, "w") as json_file:
                 # Write each bounding box annotation as a separate line
                 for annotation in value:
                     json_file.write(annotation + "\n")
         prepare_yaml(username, project_name, ["mask", "no_mask"])
+                    
+        # Save classes into "Labels.txt"            
+        classnames_list = json.loads(classnames)
+        class_path = os.path.join(f"user_project/{username}/{project_name}", "labels.txt")
+        with open(class_path, "w") as label_file:
+            for class_name in classnames_list:
+                label_file.write(class_name + "\n")
 
         # Save images
         if image_file is not None:
             images_directory = f"user_project/{username}/{project_name}/images"
             os.makedirs(images_directory, exist_ok=True)
-
+            
             for file in image_file:
                 # Use a different variable for the images directory path
                 image_directory_path = f"user_project/{username}/{project_name}/images"
-
+                
                 image_path = os.path.join(image_directory_path, file.filename)
                 with open(image_path, "wb") as f:
                     f.write(file.file.read())
@@ -181,11 +189,9 @@ async def save_object(
             return Response("Image(s) saved successfully", status_code=200)
 
         return Response("Label(s) updated successfully", status_code=200)
-
+    
     except Exception as e:
-        return Response(
-            f"Failed to save image(s) and label(s): {str(e)}", status_code=500
-        )
+        return Response(f"Failed to save image(s) and label(s): {str(e)}", status_code=500)
 
 
 @app.post("/getimage/")
@@ -231,6 +237,7 @@ async def get_object(username: str = Form(...), project_name: str = Form(...)):
             "username": username,
             "project_name": project_name,
             "images": [],
+            "classnames": [],
         }
 
         for root, _, files in os.walk(folder_path):
@@ -254,7 +261,13 @@ async def get_object(username: str = Form(...), project_name: str = Form(...)):
 
                 image_data = {"filename": file, "url": image_url, "labels": labels}
                 response_data["images"].append(image_data)
-
+            
+        class_path = f"user_project/{username}/{project_name}/labels.txt"
+        with open(class_path, "r") as f:
+            lines = f.readlines()
+            classnames = [line.strip() for line in lines if line.strip()]
+            response_data["classnames"] = classnames
+            
         return JSONResponse(content=response_data)
 
     except Exception as e:
