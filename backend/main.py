@@ -164,7 +164,6 @@ async def save_object(
                 # Write each bounding box annotation as a separate line
                 for annotation in value:
                     json_file.write(annotation + "\n")
-        prepare_yaml(username, project_name, ["mask", "no_mask"])
                     
         # Save classes into "Labels.txt"            
         classnames_list = json.loads(classnames)
@@ -172,6 +171,7 @@ async def save_object(
         with open(class_path, "w") as label_file:
             for class_name in classnames_list:
                 label_file.write(class_name + "\n")
+        prepare_yaml(username, project_name, classnames_list)
 
         # Save images
         if image_file is not None:
@@ -335,7 +335,6 @@ def object_detection_train(
     modelname: str = Form(...),
     epochs: int = Form(...),
 ):
-    prepare_yaml(username, project_name, ["mask", "no_mask"])
     obj = ObjectDetection(username, project_name, modelname)
     # threading.Thread(target=obj.train, args=(epochs,)).start()
     on_successs = lambda: send_message_to_channel(
