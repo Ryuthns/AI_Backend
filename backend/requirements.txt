@@ -40,3 +40,4 @@ ultralytics==8.1.6
 torch==2.1.0+cu118
 torchaudio==2.1.0+cu118
 torchvision==0.16.0+cu118
+dnspython>=2.6.0rc1 # not directly required, pinned by Snyk to avoid a vulnerability
