@@ -23,7 +23,8 @@ def save_predict_img(images, username, project_name):
     current_path = pathlib.Path().resolve()
     w_path = os.path.join(current_path, "user_project", username, project_name)
     predict_path = os.path.join(w_path, "predict")
-    shutil.rmtree(predict_path)
+    if os.path.exists(predict_path):
+        shutil.rmtree(predict_path)
     for im in images:
         print(im.__dir__())
         save_image(im, predict_path)
@@ -35,7 +36,7 @@ def prepare_yaml(username, project_name, class_list: List[str]):
 
     @param username: str
     @param project_name: str
-    @param class_list: list
+    @param class_list: unique classes in dataset
     """
     current_path = pathlib.Path().resolve()
     w_path = os.path.join(current_path, "user_project", username, project_name)
@@ -76,7 +77,7 @@ class ObjectDetection:
         df.columns = df.columns.str.strip()
         return df
 
-    def train(self, epoch: int = 20):
+    async def train(self, epoch: int = 20, on_success=None):
         model = YOLO("yolov8n.pt")
 
         self.remove_old_model()
@@ -97,6 +98,12 @@ class ObjectDetection:
         df = self.read_result()
         result = {}
         result["loss"] = df["train/box_loss"].to_list()
+        if on_success is not None:
+            print("on success process")
+            await on_success()
+        print("-" * 20)
+        print("training success")
+        print("-" * 20)
         return result
 
     def predict(self):
@@ -107,6 +114,9 @@ class ObjectDetection:
 
         predict_path = os.path.join(self.working_path(), "predict")
         results = model.predict(source=predict_path)
+        print("-" * 20)
+        print("model path:", results)
+        print("-" * 20)
         output = []
         for r in results:
             o = {}
@@ -114,6 +124,10 @@ class ObjectDetection:
             o["classes"] = r.boxes.cls.tolist()
             o["path"] = r.path.split("/")[-1]
             output.append(o)
+            print("-" * 20)
+            print("output:", o)
+            print("box:", r.boxes)
+            print("-" * 20)
         return output
 
 

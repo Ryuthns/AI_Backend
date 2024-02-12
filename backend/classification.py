@@ -131,6 +131,8 @@ class TrainClassification:
         images = []
         for bf in bytefiles:
             image = Image.open(io.BytesIO(bf))
+            if image.mode != "RGB":
+                image = image.convert("RGB")
             input_tensor = preprocess(image)
             images.append(input_tensor)
 

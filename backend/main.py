@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from classification import TrainClassification, get_labels_dict
 from helpers.helper import get_key_by_value
 from models.ai_models import result_input
-from objectdetection import ObjectDetection, save_predict_img
+from objectdetection import ObjectDetection, prepare_yaml, save_predict_img
 from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
 from routes.user import router as UserRouter
@@ -89,6 +89,7 @@ async def create_upload_file(
     predicted_labels = []
     folder_path = os.path.join("user_project", username, project_name)
     mapping = get_labels_dict(folder_path)
+    print("result", result)
     for p in result["predicted"]:
         print(get_key_by_value(mapping, p))
         predicted_labels.append(get_key_by_value(mapping, p))
@@ -140,8 +141,8 @@ async def save_image(
         return Response(
             f"Failed to save image(s) and label(s) {e.args}", status_code=404
         )
-        
-        
+
+
 @app.post("/saveobject/")
 async def save_object(
     image_file: List[UploadFile] = File(None),
@@ -157,21 +158,22 @@ async def save_object(
         for key, value in labels_dict.items():
             file_name, _ = os.path.splitext(key)
             labels_path = os.path.join(labels_directory, f"{file_name}.txt")
-            
+
             with open(labels_path, "w") as json_file:
                 # Write each bounding box annotation as a separate line
                 for annotation in value:
                     json_file.write(annotation + "\n")
+        prepare_yaml(username, project_name, ["mask", "no_mask"])
 
         # Save images
         if image_file is not None:
             images_directory = f"user_project/{username}/{project_name}/images"
             os.makedirs(images_directory, exist_ok=True)
-            
+
             for file in image_file:
                 # Use a different variable for the images directory path
                 image_directory_path = f"user_project/{username}/{project_name}/images"
-                
+
                 image_path = os.path.join(image_directory_path, file.filename)
                 with open(image_path, "wb") as f:
                     f.write(file.file.read())
@@ -179,11 +181,11 @@ async def save_object(
             return Response("Image(s) saved successfully", status_code=200)
 
         return Response("Label(s) updated successfully", status_code=200)
-    
+
     except Exception as e:
-        return Response(f"Failed to save image(s) and label(s): {str(e)}", status_code=500)
-
-
+        return Response(
+            f"Failed to save image(s) and label(s): {str(e)}", status_code=500
+        )
 
 
 @app.post("/getimage/")
@@ -228,7 +230,7 @@ async def get_object(username: str = Form(...), project_name: str = Form(...)):
         response_data = {
             "username": username,
             "project_name": project_name,
-            "images": []
+            "images": [],
         }
 
         for root, _, files in os.walk(folder_path):
@@ -236,31 +238,30 @@ async def get_object(username: str = Form(...), project_name: str = Form(...)):
             for file in files:
                 image_url = f"http://localhost:8000/image/?username={username}&project_name={project_name}&file_name={file}"
                 file_name, _ = os.path.splitext(file)
-                label_file_path = f"user_project/{username}/{project_name}/labels/{file_name}.txt"
+                label_file_path = (
+                    f"user_project/{username}/{project_name}/labels/{file_name}.txt"
+                )
 
                 # Read the plain text file for labels
                 try:
                     with open(label_file_path, "r") as f:
                         lines = f.readlines()
-                        labels = [line.strip() for line in lines if line.strip()]  # Filter out empty lines
+                        labels = [
+                            line.strip() for line in lines if line.strip()
+                        ]  # Filter out empty lines
                 except FileNotFoundError:
                     labels = []  # Handle the case where the label file is not found
 
-                image_data = {
-                    "filename": file,
-                    "url": image_url,
-                    "labels": labels
-                }
+                image_data = {"filename": file, "url": image_url, "labels": labels}
                 response_data["images"].append(image_data)
 
         return JSONResponse(content=response_data)
 
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get image URLs and labels: {str(e)}"
+            status_code=500, detail=f"Failed to get image URLs and labels: {str(e)}"
         )
-    
+
 
 @app.delete("/deletefolder/")
 async def delete_folder(username: str, project_name: str):
@@ -321,8 +322,15 @@ def object_detection_train(
     modelname: str = Form(...),
     epochs: int = Form(...),
 ):
+    prepare_yaml(username, project_name, ["mask", "no_mask"])
     obj = ObjectDetection(username, project_name, modelname)
     # threading.Thread(target=obj.train, args=(epochs,)).start()
+    on_successs = lambda: send_message_to_channel(
+        f"{username}_{project_name}", {"training_status": "success"}
+    )
+    threading.Thread(
+        target=wrap_async_func, args=(obj.train, epochs, on_successs)
+    ).start()
     result = obj.train(epochs)
     return "running"
 
