@@ -4,6 +4,7 @@ import queue
 import shutil
 import threading
 from typing import Dict, List, Union
+from PIL import Image
 import asyncio
 
 import uvicorn
@@ -245,21 +246,26 @@ async def get_object(username: str = Form(...), project_name: str = Form(...), a
             for file in files:
                 image_url = f"{address}/image/?username={username}&project_name={project_name}&file_name={file}"
                 file_name, _ = os.path.splitext(file)
-                label_file_path = (
-                    f"user_project/{username}/{project_name}/labels/{file_name}.txt"
-                )
+                label_file_path = f"user_project/{username}/{project_name}/labels/{file_name}.txt"
+                
+                # Get image dimensions using PIL
+                image_path = os.path.join(folder_path, file)
+                with Image.open(image_path) as img:
+                    width, height = img.size
 
-                # Read the plain text file for labels
-                try:
-                    with open(label_file_path, "r") as f:
-                        lines = f.readlines()
-                        labels = [
-                            line.strip() for line in lines if line.strip()
-                        ]  # Filter out empty lines
-                except FileNotFoundError:
-                    labels = []  # Handle the case where the label file is not found
+                with open(label_file_path, "r") as f:
+                    lines = f.readlines()
+                    labels = [
+                        line.strip() for line in lines if line.strip()
+                    ]  # Filter out empty lines
 
-                image_data = {"filename": file, "url": image_url, "labels": labels}
+                image_data = {
+                    "filename": file,
+                    "url": image_url,
+                    "labels": labels,
+                    "width": width,
+                    "height": height,
+                }
                 response_data["images"].append(image_data)
             
         class_path = f"user_project/{username}/{project_name}/labels.txt"
