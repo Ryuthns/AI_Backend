@@ -1,11 +1,13 @@
+import json
 import os
 import pathlib
 import shutil
 from typing import List
-import json
 
 import pandas as pd
 from ultralytics import YOLO
+
+from helpers.model import load_metadata, save_metadata
 
 
 def _on_train_epoch_end(pred, username, project_name, model_name):
@@ -147,10 +149,23 @@ class ObjectDetection:
         if on_success is not None:
             print("on success process")
             await on_success()
+
+        self.calculate_summarize(train_result)
+
         print("-" * 20)
         print("training success")
         print("-" * 20)
         return result
+
+    def calculate_summarize(self, result):
+        path = get_model_folder(self.username, self.project_name, self.model_name)
+        data = load_metadata(path)
+        result_dict = result.results_dict
+        data["average_precision"] = result_dict["metrics/mAP50(B)"]
+        data["precision"] = result_dict["metrics/precision(B)"]
+        data["recall"] = result_dict["metrics/recall(B)"]
+        data["training_status"] = True
+        save_metadata(path, data)
 
     def predict(self):
         model_path = os.path.join(

@@ -375,14 +375,42 @@ def object_detection_train(
     project_name: str = Form(...),
     modelname: str = Form(...),
     epochs: int = Form(...),
+    train_size: float = Form(default=0.8),
+    validate_size: float = Form(default=0.1),
+    test_size: float = Form(default=0.1),
 ):
-    obj = ObjectDetection(username, project_name, modelname)
-    # threading.Thread(target=obj.train, args=(epochs,)).start()
-    on_successs = lambda: send_message_to_channel(
-        f"{username}_{project_name}", {"training_status": "success"}
+    total_image = len(
+        os.listdir("user_project/" + username + "/" + project_name + "/images")
     )
+    metadata = MetadataModel(
+        train_image=math.floor(total_image * train_size),
+        validate_image=math.floor(total_image * validate_size),
+        test_image=math.floor(total_image * test_size),
+        train_ratio=train_size,
+        validate_ratio=validate_size,
+        test_ratio=test_size,
+        total_image=total_image,
+    )
+    model_path = (
+        "user_project/" + username + "/" + project_name + "/models/" + modelname
+    )
+    save_metadata(model_path, metadata.model_dump())
+    obj = ObjectDetection(username, project_name, modelname)
+
+    # threading.Thread(target=obj.train, args=(epochs,)).start()
+    def on_successs():
+        save_metadata(model_path, metadata.model_dump())
+        return send_message_to_channel(
+            f"{username}_{project_name}", {"training_status": "success"}
+        )
+
     threading.Thread(
-        target=wrap_async_func, args=(obj.train, epochs, on_successs)
+        target=wrap_async_func,
+        args=(
+            obj.train,
+            epochs,
+            on_successs,
+        ),
     ).start()
     result = obj.train(epochs)
     return "running"
