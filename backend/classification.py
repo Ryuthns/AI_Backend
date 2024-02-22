@@ -46,7 +46,7 @@ def get_labels_dict(folder_path):
     # labels_list = data.map(lambda x: x["annotations"][0])
     labels_list = [x["annotations"][0] for x in data]
     # Get unique labels
-    unique_labels = list(set(labels_list))
+    unique_labels = sorted(list(set(labels_list)))
 
     # Create a mapping from labels to numeric indices
     result = {label: index for index, label in enumerate(unique_labels)}
@@ -121,7 +121,7 @@ class TrainClassification:
 
     def change_to_num_labels(self, labels):
         # Get unique labels
-        unique_labels = list(set(labels))
+        unique_labels = sorted(list(set(labels)))
 
         # Create a mapping from labels to numeric indices
         label_to_index = {label: index for index, label in enumerate(unique_labels)}
@@ -364,6 +364,8 @@ class TrainClassification:
         images = []
         for bf in bytefile:
             input_image = Image.open(io.BytesIO(bf.read()))
+            if input_image.mode != "RGB":
+                input_image = input_image.convert("RGB")
             input_tensor = self._preprocess_image(input_image)
             images.append(input_tensor)
 
@@ -382,10 +384,23 @@ class TrainClassification:
         if len(images) == 1:
             probabilities = torch.nn.functional.softmax(output)
         print(probabilities)
+
         predicted = torch.argmax(probabilities, dim=1).tolist()
         print("topk:", predicted)
 
-        return {"probabilities": probabilities.tolist(), "predicted": predicted}
+        prob_with_classname = []
+        path = os.path.join("user_project", self.username, self.project_name)
+        classname = get_labels_dict(path).keys()
+        probabilities = probabilities.tolist()
+
+        for p in probabilities:
+            output = {c: p[i] for i, c in enumerate(classname)}
+            prob_with_classname.append(output)
+        return {
+            "probabilities": probabilities,
+            "predicted": predicted,
+            "prob_with_classname": prob_with_classname,
+        }
 
     def _get_top_classes(self, probabilities):
         categories = []
