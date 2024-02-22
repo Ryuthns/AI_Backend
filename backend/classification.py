@@ -26,7 +26,7 @@ from helpers.model import load_metadata, save_metadata
 def plot_confusion_matrix(confusion_mat, class_names, save_path):
     plt.figure(figsize=(8, 6))
     sns.heatmap(
-        confusion_mat,
+        confusion_mat.T,
         annot=True,
         fmt="d",
         cmap="Blues",
@@ -34,8 +34,8 @@ def plot_confusion_matrix(confusion_mat, class_names, save_path):
         yticklabels=class_names,
     )
     plt.title("Confusion Matrix")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
+    plt.ylabel("Predicted")
+    plt.xlabel("True")
     plt.savefig(save_path)
 
 
@@ -128,7 +128,7 @@ class TrainClassification:
 
         # Convert original labels to numeric labels using the mapping
         numeric_labels = torch.tensor([label_to_index[label] for label in labels])
-        return numeric_labels
+        return unique_labels, numeric_labels
 
     def get_label_path(self):
         path = f"{self.username}/{self.project_name}/labels/lebel.txt"
@@ -171,10 +171,7 @@ class TrainClassification:
             input_tensor = preprocess(image)
             images.append(input_tensor)
 
-        print(images[0].shape, labels)
-        print("labels:", labels)
-        print("n labels", self.change_to_num_labels(labels))
-        labels = self.change_to_num_labels(labels)
+        classname, labels = self.change_to_num_labels(labels)
 
         # Split data into train, validation, and test sets
         X_train, X_temp, y_train, y_temp = train_test_split(
@@ -240,7 +237,7 @@ class TrainClassification:
 
         result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
         self._save_train_result(result)
-        self.calculate_summalize(val_loader)
+        self.calculate_summalize(val_loader, classname)
         if on_success is not None:
             print("on success process")
             await on_success()
@@ -274,7 +271,7 @@ class TrainClassification:
         if os.path.exists("mobilenet_v2_trained.pth"):
             self.model.load_state_dict(torch.load("mobilenet_v2_trained.pth"))
 
-    def calculate_summalize(self, validation_loader):
+    def calculate_summalize(self, validation_loader, classname):
         # Evaluate the model
         if not self.model:
             self._load_model()
@@ -323,12 +320,11 @@ class TrainClassification:
         confusion_mat = confusion_matrix(all_labels, all_predictions)
 
         # Plot and save confusion matrix
-        class_names = list(map(str, range(len(confusion_mat))))
         model_path = self.get_model_folder()
         save_path = os.path.join(model_path, "confusion_matrix.png")
         print("confusion path:", save_path)
         print("*" * 30)
-        plot_confusion_matrix(confusion_mat, class_names, save_path)
+        plot_confusion_matrix(confusion_mat, classname, save_path)
 
         # # Calculate average precision
         # average_precision = average_precision_score(all_labels, all_predictions)
