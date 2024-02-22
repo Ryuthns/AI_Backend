@@ -4,6 +4,8 @@ from torchvision import os
 from database.database import MongoModel
 import shutil
 
+from helpers.model import load_metadata
+
 router = APIRouter()
 
 
@@ -44,3 +46,14 @@ async def delete_models(
         return Response(f"Folder '{path}' removed successfully.", 200)
     except Exception as e:
         return Response(f"Error: {e}", 500)
+
+
+@router.get("/metadata")
+async def get_metadata(
+    project_name: str = "", username: str = "", model_name: str = ""
+):
+    if project_name == "" or username == "":
+        return Response("invalid input", status_code=401)
+    path = os.path.join("user_project", username, project_name, "models", model_name)
+    data = load_metadata(path)
+    return data

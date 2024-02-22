@@ -1,30 +1,32 @@
+import asyncio
 import json
 import os
 import queue
 import shutil
 import threading
 from typing import Dict, List, Union
-from PIL import Image
-import asyncio
+import math
 
 import uvicorn
 from fastapi import (
     FastAPI,
     File,
     Form,
+    HTTPException,
     Query,
     Response,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
-    HTTPException,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from PIL import Image
 
 from classification import TrainClassification, get_labels_dict
 from helpers.helper import get_key_by_value
-from models.ai_models import result_input
+from helpers.model import save_metadata
+from models.ai_models import MetadataModel, result_input
 from objectdetection import ObjectDetection, prepare_yaml, save_predict_img
 from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
@@ -160,15 +162,17 @@ async def save_object(
         for key, value in labels_dict.items():
             file_name, _ = os.path.splitext(key)
             labels_path = os.path.join(labels_directory, f"{file_name}.txt")
-            
+
             with open(labels_path, "w") as json_file:
                 # Write each bounding box annotation as a separate line
                 for annotation in value:
                     json_file.write(annotation + "\n")
-                    
-        # Save classes into "Labels.txt"            
+
+        # Save classes into "Labels.txt"
         classnames_list = json.loads(classnames)
-        class_path = os.path.join(f"user_project/{username}/{project_name}", "labels.txt")
+        class_path = os.path.join(
+            f"user_project/{username}/{project_name}", "labels.txt"
+        )
         with open(class_path, "w") as label_file:
             for class_name in classnames_list:
                 label_file.write(class_name + "\n")
@@ -178,11 +182,11 @@ async def save_object(
         if image_file is not None:
             images_directory = f"user_project/{username}/{project_name}/images"
             os.makedirs(images_directory, exist_ok=True)
-            
+
             for file in image_file:
                 # Use a different variable for the images directory path
                 image_directory_path = f"user_project/{username}/{project_name}/images"
-                
+
                 image_path = os.path.join(image_directory_path, file.filename)
                 with open(image_path, "wb") as f:
                     f.write(file.file.read())
@@ -190,13 +194,17 @@ async def save_object(
             return Response("Image(s) saved successfully", status_code=200)
 
         return Response("Label(s) updated successfully", status_code=200)
-    
+
     except Exception as e:
-        return Response(f"Failed to save image(s) and label(s): {str(e)}", status_code=500)
+        return Response(
+            f"Failed to save image(s) and label(s): {str(e)}", status_code=500
+        )
 
 
 @app.post("/getimage/")
-async def get_images(username: str = Form(...), project_name: str = Form(...), address: str = Form(...)):
+async def get_images(
+    username: str = Form(...), project_name: str = Form(...), address: str = Form(...)
+):
     try:
         folder_path = f"user_project/{username}/{project_name}/images"
 
@@ -230,7 +238,9 @@ async def get_images(username: str = Form(...), project_name: str = Form(...), a
 
 
 @app.post("/getobject/")
-async def get_object(username: str = Form(...), project_name: str = Form(...), address: str = Form(...)):
+async def get_object(
+    username: str = Form(...), project_name: str = Form(...), address: str = Form(...)
+):
     try:
         folder_path = f"user_project/{username}/{project_name}/images"
 
@@ -240,14 +250,16 @@ async def get_object(username: str = Form(...), project_name: str = Form(...), a
             "images": [],
             "classnames": [],
         }
-        
+
         for root, _, files in os.walk(folder_path):
             files.sort()
             for file in files:
                 image_url = f"{address}/image/?username={username}&project_name={project_name}&file_name={file}"
                 file_name, _ = os.path.splitext(file)
-                label_file_path = f"user_project/{username}/{project_name}/labels/{file_name}.txt"
-                
+                label_file_path = (
+                    f"user_project/{username}/{project_name}/labels/{file_name}.txt"
+                )
+
                 # Get image dimensions using PIL
                 image_path = os.path.join(folder_path, file)
                 with Image.open(image_path) as img:
@@ -267,13 +279,13 @@ async def get_object(username: str = Form(...), project_name: str = Form(...), a
                     "height": height,
                 }
                 response_data["images"].append(image_data)
-            
+
         class_path = f"user_project/{username}/{project_name}/labels.txt"
         with open(class_path, "r") as f:
             lines = f.readlines()
             classnames = [line.strip() for line in lines if line.strip()]
             response_data["classnames"] = classnames
-            
+
         return JSONResponse(content=response_data)
 
     except Exception as e:
@@ -317,16 +329,39 @@ async def train_model(
     username: str = Form(...),
     project_name: str = Form(...),
     modelname: str = Form(...),
+    train_size: float = Form(default=0.8),
+    validate_size: float = Form(default=0.1),
+    test_size: float = Form(default=0.1),
 ):
+    total_image = len(
+        os.listdir("user_project/" + username + "/" + project_name + "/images")
+    )
+    metadata = MetadataModel(
+        train_image=math.floor(total_image * train_size),
+        validate_image=math.floor(total_image * validate_size),
+        test_image=math.floor(total_image * test_size),
+        train_ratio=train_size,
+        validate_ratio=validate_size,
+        test_ratio=test_size,
+        total_image=total_image,
+    )
+    model_path = (
+        "user_project/" + username + "/" + project_name + "/models/" + modelname
+    )
+    save_metadata(model_path, metadata.model_dump())
     # Call the train method with the received data
     c = TrainClassification(len(set([])), username, project_name, modelname)
-    on_successs = lambda: send_message_to_channel(
-        f"{username}_{project_name}", {"training_status": "success"}
-    )
+
+    def on_successs():
+        return send_message_to_channel(
+            f"{username}_{project_name}", {"training_status": "success"}
+        )
+
     print("channel", f"{username}_{project_name}")
     # threading.Thread(target=c.train, args=(epochs, lr, on_successs)).start()
     threading.Thread(
-        target=wrap_async_func, args=(c.train, epochs, lr, on_successs)
+        target=wrap_async_func,
+        args=(c.train, epochs, lr, on_successs, train_size, validate_size, test_size),
     ).start()
     # result = c.train(epochs, lr)
 

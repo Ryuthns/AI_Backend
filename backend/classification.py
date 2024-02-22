@@ -1,8 +1,11 @@
 import io
 import json
 import os
+import numpy as np
 from os import listdir, path
 from typing import BinaryIO, Callable, List, Tuple, Union, Optional
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_score, recall_score, average_precision_score
 
 import torch
 import torch.nn as nn
@@ -10,6 +13,7 @@ import torch.optim as optim
 from PIL import Image
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import transforms
+from helpers.model import load_metadata, save_metadata
 
 
 def get_labels_dict(folder_path):
@@ -107,7 +111,15 @@ class TrainClassification:
         path = f"{self.username}/{self.project_name}/labels/lebel.txt"
         return path
 
-    async def train(self, epochs: int, lr: float, on_success=None):
+    async def train(
+        self,
+        epochs: int,
+        lr: float,
+        on_success=None,
+        train_ratio=0.8,
+        validate_ratio=0.1,
+        test_ratio=0.1,
+    ):
         # if bytefiles is None or labels is None:
         #     return
 
@@ -140,8 +152,28 @@ class TrainClassification:
         print("labels:", labels)
         print("n labels", self.change_to_num_labels(labels))
         labels = self.change_to_num_labels(labels)
-        train_dataset = TensorDataset(torch.stack(images), torch.Tensor(labels).long())
+
+        # Split data into train, validation, and test sets
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            images, labels, test_size=validate_ratio + test_ratio, random_state=42
+        )
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, test_size=test_ratio, random_state=42
+        )
+
+        # Create DataLoader for training set
+        train_dataset = TensorDataset(
+            torch.stack(X_train), torch.Tensor(y_train).long()
+        )
         train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+
+        # Create DataLoader for validation set
+        val_dataset = TensorDataset(torch.stack(X_val), torch.Tensor(y_val).long())
+        val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
+
+        # Create DataLoader for test set
+        test_dataset = TensorDataset(torch.stack(X_test), torch.Tensor(y_test).long())
+        test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 
         optimizer = optim.SGD(self.model.parameters(), lr=lr)
 
@@ -185,6 +217,7 @@ class TrainClassification:
 
         result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
         self._save_train_result(result)
+        self.calculate_summalize(val_loader)
         if on_success is not None:
             print("on success process")
             await on_success()
@@ -212,10 +245,119 @@ class TrainClassification:
         print("load models", model_path)
         if os.path.exists(model_path):
             self.model = torch.load(model_path)
+            self.model.eval()
             print("load models success!!")
             return
         if os.path.exists("mobilenet_v2_trained.pth"):
             self.model.load_state_dict(torch.load("mobilenet_v2_trained.pth"))
+
+    def calculate_summalize(self, validation_loader):
+        # Evaluate the model
+        if not self.model:
+            self._load_model()
+        self.model.eval()
+
+        all_labels = []
+        all_predictions = []
+        all_predictions2d = []
+
+        with torch.no_grad():
+            for data in validation_loader:
+                inputs, labels = data
+                outputs = self.model(inputs)
+                all_predictions2d.extend(outputs.numpy())
+
+                _, predicted = torch.max(outputs, 1)
+
+                all_labels.extend(labels.numpy())
+                all_predictions.extend(predicted.numpy())
+
+        # Ensure the lengths match
+        print("Length of labels:", all_labels)
+        print("Length of predictions:", all_predictions)
+
+        # Convert to NumPy arrays
+        all_labels = np.array(all_labels)
+        all_predictions = np.array(all_predictions)
+        all_predictions2d = np.array(all_predictions2d)
+
+        # Ensure labels are numeric
+        all_labels = all_labels.astype(int)
+        all_predictions = all_predictions.astype(int)
+        all_predictions2d = all_predictions2d.astype(int)
+
+        # Calculate precision, recall, and average precision
+        precision = precision_score(all_labels, all_predictions, average="weighted")
+        recall = recall_score(all_labels, all_predictions, average="weighted")
+        print("Precision:", precision, "Recall:", recall)
+
+        # Calculate average precision
+        average_precision = average_precision_score(
+            all_labels, all_predictions2d, average="macro"
+        )
+
+        # # Calculate average precision
+        # average_precision = average_precision_score(all_labels, all_predictions)
+
+        path = self.get_model_folder()
+        data = load_metadata(path)
+        data["average_precision"] = average_precision
+        data["precision"] = precision
+        data["recall"] = recall
+        save_metadata(path, data)
+
+        print("-" * 20)
+        print("Summarize success")
+        print(data)
+        print("-" * 20)
+
+    def calculate_summalize2(self, validation_loader):
+        # Evaluate the model
+        if not self.model:
+            self._load_model()
+        self.model.eval()
+
+        all_labels = []
+        all_predictions = []
+
+        with torch.no_grad():
+            for data in validation_loader:
+                inputs, labels = data
+                outputs = self.model(inputs)
+
+                _, predicted = torch.max(outputs, 1)
+
+                all_labels.extend(labels.numpy())
+                all_predictions.extend(predicted.numpy())
+
+        # Calculate precision, recall, and average precision
+        precision = precision_score(all_labels, all_predictions, average="weighted")
+        recall = recall_score(all_labels, all_predictions, average="weighted")
+        print("precision", precision, "recall", recall)
+        print("all:", all_labels, all_predictions)
+        # Reshape the arrays to 2D
+        all_labels_2d = np.array(all_labels).reshape(-1, 1)
+        all_predictions_2d = np.array(all_predictions).reshape(-1, 1)
+
+        # Calculate average precision
+        average_precision = average_precision_score(
+            all_labels_2d, all_predictions_2d, average="weighted"
+        )
+        average_precision = average_precision_score(
+            all_labels, all_predictions, average="weighted"
+        )
+
+        path = self.get_model_folder()
+        data = load_metadata(path)
+        data["average_precision"] = average_precision
+        data["precision"] = precision
+        data["recall"] = recall
+        data["training_status"] = True
+        save_metadata(path, data)
+        print("-" * 20)
+        print("summarize success")
+        print(data)
+        print("-" * 20)
 
     def _preprocess_image(self, input_image):
         preprocess = transforms.Compose(
