@@ -5,7 +5,14 @@ import numpy as np
 from os import listdir, path
 from typing import BinaryIO, Callable, List, Tuple, Union, Optional
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import precision_score, recall_score, average_precision_score
+from sklearn.metrics import (
+    precision_score,
+    recall_score,
+    average_precision_score,
+    confusion_matrix,
+)
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 import torch
 import torch.nn as nn
@@ -14,6 +21,22 @@ from PIL import Image
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import transforms
 from helpers.model import load_metadata, save_metadata
+
+
+def plot_confusion_matrix(confusion_mat, class_names, save_path):
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        confusion_mat,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=class_names,
+        yticklabels=class_names,
+    )
+    plt.title("Confusion Matrix")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.savefig(save_path)
 
 
 def get_labels_dict(folder_path):
@@ -295,6 +318,17 @@ class TrainClassification:
         average_precision = average_precision_score(
             all_labels, all_predictions2d, average="macro"
         )
+        #
+        # Compute confusion matrix
+        confusion_mat = confusion_matrix(all_labels, all_predictions)
+
+        # Plot and save confusion matrix
+        class_names = list(map(str, range(len(confusion_mat))))
+        model_path = self.get_model_folder()
+        save_path = os.path.join(model_path, "confusion_matrix.png")
+        print("confusion path:", save_path)
+        print("*" * 30)
+        plot_confusion_matrix(confusion_mat, class_names, save_path)
 
         # # Calculate average precision
         # average_precision = average_precision_score(all_labels, all_predictions)
@@ -308,54 +342,6 @@ class TrainClassification:
 
         print("-" * 20)
         print("Summarize success")
-        print(data)
-        print("-" * 20)
-
-    def calculate_summalize2(self, validation_loader):
-        # Evaluate the model
-        if not self.model:
-            self._load_model()
-        self.model.eval()
-
-        all_labels = []
-        all_predictions = []
-
-        with torch.no_grad():
-            for data in validation_loader:
-                inputs, labels = data
-                outputs = self.model(inputs)
-
-                _, predicted = torch.max(outputs, 1)
-
-                all_labels.extend(labels.numpy())
-                all_predictions.extend(predicted.numpy())
-
-        # Calculate precision, recall, and average precision
-        precision = precision_score(all_labels, all_predictions, average="weighted")
-        recall = recall_score(all_labels, all_predictions, average="weighted")
-        print("precision", precision, "recall", recall)
-        print("all:", all_labels, all_predictions)
-        # Reshape the arrays to 2D
-        all_labels_2d = np.array(all_labels).reshape(-1, 1)
-        all_predictions_2d = np.array(all_predictions).reshape(-1, 1)
-
-        # Calculate average precision
-        average_precision = average_precision_score(
-            all_labels_2d, all_predictions_2d, average="weighted"
-        )
-        average_precision = average_precision_score(
-            all_labels, all_predictions, average="weighted"
-        )
-
-        path = self.get_model_folder()
-        data = load_metadata(path)
-        data["average_precision"] = average_precision
-        data["precision"] = precision
-        data["recall"] = recall
-        data["training_status"] = True
-        save_metadata(path, data)
-        print("-" * 20)
-        print("summarize success")
         print(data)
         print("-" * 20)
 
