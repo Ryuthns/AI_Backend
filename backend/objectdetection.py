@@ -14,8 +14,10 @@ from helpers.model import load_metadata, save_metadata
 
 def _on_train_epoch_end(pred, username, project_name, model_name):
     loss = pred.loss.item()
-    print("on_train_epoch_end loss", pred.loss)
     fitness = pred.fitness
+    print("metrics key:", pred.metrics.keys())
+    precision = pred.metrics.get("metrics/precision(B)")
+    recall = pred.metrics.get("metrics/recall(B)")
     path = get_model_folder(username, project_name, model_name)
     result_path = os.path.join(path, "result.json")
     if fitness is None:
@@ -26,14 +28,19 @@ def _on_train_epoch_end(pred, username, project_name, model_name):
 
             data["accuracy"].append(fitness)  # Append the new fitness value
             data["loss"].append(loss)  # Append the new loss value
+            data["precision"].append(precision)
+            data["recall"].append(recall)
 
             file.seek(0)  # Move to the beginning of the file
             json.dump(data, file)
     else:
-        data = {"loss": [], "accuracy": []}
+        data = {"loss": [], "accuracy": [], "precision": [], "recall": []}
         data["accuracy"].append(fitness)
         data["loss"].append(loss)
+        data["precision"].append(precision)
+        data["recall"].append(recall)
         _save_train_result(data, result_path)
+    print(data)
     return
 
 
