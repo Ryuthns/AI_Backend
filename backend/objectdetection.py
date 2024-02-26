@@ -158,6 +158,7 @@ class ObjectDetection:
         df = self.read_result()
         result = {}
         result["loss"] = df["train/box_loss"].to_list()
+        queue.put(None)
         if on_success is not None:
             print("on success process")
             await on_success()

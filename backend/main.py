@@ -44,21 +44,14 @@ async def process_queue(callback_queue):
     while True:
         try:
             item = callback_queue.get()
+            if item is None:
+                print("progress break")
+                break
             await item()
         except Exception as e:
             print("Queue is empty or no new data available")
             continue
 
-
-# Initialize a queue
-callback_queue = queue.Queue()
-
-# Start a thread for processing the queue
-processing_thread = threading.Thread(
-    target=asyncio.run,
-    args=(process_queue(callback_queue),),
-)
-processing_thread.start()
 
 # Dictionary to store WebSocket connections for each channel
 channel_connections: Dict[str, WebSocket] = {}
@@ -457,15 +450,20 @@ def object_detection_train(
                 "type": "visualization",
                 "data": {
                     "total_epoch": trainer.epochs,
-                    "progress_epoch": trainer.epoch,
+                    "progress_epoch": trainer.epoch + 1,
                 },
             },
         )
 
-    # Assuming model.add_callback accepts a regular function
-    async def on_train_epoch_end_callback(trainer):
-        # Create an event to synchronize the on_epoch_end and the training loop
-        await on_epoch_end(trainer)
+    # Initialize a queue
+    callback_queue = queue.Queue()
+
+    # Start a thread for processing the queue
+    processing_thread = threading.Thread(
+        target=asyncio.run,
+        args=(process_queue(callback_queue),),
+    )
+    processing_thread.start()
 
     threading.Thread(
         target=wrap_async_func,
