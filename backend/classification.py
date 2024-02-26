@@ -200,10 +200,16 @@ class TrainClassification:
 
         epoch_losses = []
         epoch_accuracies = []
+        epoch_precision = []
+        epoch_recall = []
+        epoch_val_losses = []
+        epoch_val_accuracies = []
         for epoch in range(epochs):
             running_loss = 0.0
             correct = 0
             total = 0
+            true_labels = []
+            predicted_labels = []
 
             for i, data in enumerate(train_loader, 0):
                 inputs, label = data
@@ -221,14 +227,56 @@ class TrainClassification:
                 total += label.size(0)
                 correct += (predicted == label).sum().item()
 
+                # Collect true and predicted labels for precision and recall calculation
+                true_labels.extend(label.numpy())
+                predicted_labels.extend(predicted.numpy())
+
+            # Calculate precision and recall
+            precision = precision_score(
+                true_labels, predicted_labels, average="weighted"
+            )
+            recall = recall_score(true_labels, predicted_labels, average="weighted")
+            epoch_precision.append(precision)
+            epoch_recall.append(recall)
+
             epoch_loss = running_loss / len(train_loader)
             epoch_losses.append(epoch_loss)
 
             epoch_accuracy = 100 * correct / total
             epoch_accuracies.append(epoch_accuracy)
 
+            # Validation loop
+            val_running_loss = 0.0
+            val_correct = 0
+            val_total = 0
+
+            with torch.no_grad():
+                for val_data in val_loader:
+                    val_inputs, val_label = val_data
+                    val_outputs = self.model(val_inputs)
+                    val_loss = self.criterion(val_outputs, val_label)
+
+                    val_running_loss += val_loss.item()
+
+                    _, val_predicted = torch.max(val_outputs.data, 1)
+                    val_total += val_label.size(0)
+                    val_correct += (val_predicted == val_label).sum().item()
+
+            # Calculate validation loss
+            val_epoch_loss = val_running_loss / len(val_loader)
+            val_epoch_accuracy = 100 * val_correct / val_total
+            epoch_val_losses.append(val_epoch_loss)
+            epoch_val_accuracies.append(val_epoch_accuracy)
+
             print(f"Epoch {epoch+1}, Loss: {epoch_loss}, Accuracy: {epoch_accuracy}%")
-            batch_result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
+            batch_result = {
+                "loss": epoch_losses,
+                "accuracy": epoch_accuracies,
+                "precision": epoch_precision,
+                "recall": epoch_recall,
+                "val_loss": epoch_val_losses,
+                "val_accuracy": epoch_val_accuracies,
+            }
             self._save_train_result(batch_result)
 
             # call function on_epoch_end
@@ -240,7 +288,14 @@ class TrainClassification:
         torch.save(self.model, filename)
         print("Finished Training and saved the model")
 
-        result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
+        result = {
+            "loss": epoch_losses,
+            "accuracy": epoch_accuracies,
+            "precision": epoch_precision,
+            "recall": epoch_recall,
+            "val_loss": epoch_val_losses,
+            "val_accuracy": epoch_val_accuracies,
+        }
         self._save_train_result(result)
         self.calculate_summalize(val_loader, classname)
         if on_success is not None:
