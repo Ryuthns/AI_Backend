@@ -4,7 +4,7 @@ import os
 import queue
 import shutil
 import threading
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 import math
 
 import uvicorn
@@ -37,7 +37,28 @@ app = FastAPI()
 origins = ["*"]
 mapping = {}
 
-main_queue = queue.Queue(maxsize=0)
+
+# @app.on_event("startup")
+# async def startup_event():
+async def process_queue(callback_queue):
+    while True:
+        try:
+            item = callback_queue.get()
+            await item()
+        except Exception as e:
+            print("Queue is empty or no new data available")
+            continue
+
+
+# Initialize a queue
+callback_queue = queue.Queue()
+
+# Start a thread for processing the queue
+processing_thread = threading.Thread(
+    target=asyncio.run,
+    args=(process_queue(callback_queue),),
+)
+processing_thread.start()
 
 # Dictionary to store WebSocket connections for each channel
 channel_connections: Dict[str, WebSocket] = {}
@@ -354,14 +375,37 @@ async def train_model(
 
     def on_successs():
         return send_message_to_channel(
-            f"{username}_{project_name}", {"training_status": "success"}
+            f"{username}_{project_name}",
+            {"type": "train", "data": {"status": "success"}},
+        )
+
+    def on_epoch_end(total_epoch, progress_epoch):
+        print("epoch end")
+        return send_message_to_channel(
+            f"{username}_{project_name}",
+            {
+                "type": "visualization",
+                "data": {
+                    "total_epoch": total_epoch,
+                    "progress_epoch": progress_epoch + 1,
+                },
+            },
         )
 
     print("channel", f"{username}_{project_name}")
     # threading.Thread(target=c.train, args=(epochs, lr, on_successs)).start()
     threading.Thread(
         target=wrap_async_func,
-        args=(c.train, epochs, lr, on_successs, train_size, validate_size, test_size),
+        args=(
+            c.train,
+            epochs,
+            lr,
+            on_successs,
+            train_size,
+            validate_size,
+            test_size,
+            on_epoch_end,
+        ),
     ).start()
     # result = c.train(epochs, lr)
 
@@ -401,16 +445,31 @@ def object_detection_train(
     def on_successs():
         save_metadata(model_path, metadata.model_dump())
         return send_message_to_channel(
-            f"{username}_{project_name}", {"training_status": "success"}
+            f"{username}_{project_name}",
+            {"type": "train", "data": {"status": "success"}},
         )
+
+    async def on_epoch_end(trainer):
+        print("wtf")
+        await send_message_to_channel(
+            f"{username}_{project_name}",
+            {
+                "type": "visualization",
+                "data": {
+                    "total_epoch": trainer.epochs,
+                    "progress_epoch": trainer.epoch,
+                },
+            },
+        )
+
+    # Assuming model.add_callback accepts a regular function
+    async def on_train_epoch_end_callback(trainer):
+        # Create an event to synchronize the on_epoch_end and the training loop
+        await on_epoch_end(trainer)
 
     threading.Thread(
         target=wrap_async_func,
-        args=(
-            obj.train,
-            epochs,
-            on_successs,
-        ),
+        args=(obj.train, epochs, on_successs, on_epoch_end, callback_queue),
     ).start()
     result = obj.train(epochs)
     return "running"
@@ -456,7 +515,7 @@ async def broadcast(channel: str, message: str):
             await connection.send_text(message)
 
 
-async def send_message_to_channel(channel: str, message: Union[str, Dict[str, str]]):
+async def send_message_to_channel(channel: str, message: Union[str, Dict[str, Any]]):
     # Check if the channel exists in the dictionary
     print("message: ", message)
     if channel in channel_connections:

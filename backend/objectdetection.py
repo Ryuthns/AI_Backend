@@ -6,6 +6,8 @@ from typing import List
 
 import pandas as pd
 from ultralytics import YOLO
+from ultralytics.models.yolo.detect import DetectionTrainer
+from ultralytics.utils import DEFAULT_CFG
 
 from helpers.model import load_metadata, save_metadata
 
@@ -91,6 +93,12 @@ def prepare_yaml(username, project_name, class_list: List[str]):
         file.write(f"names: [{','.join(class_list)}]\n")
 
 
+class CustomDetectionTrainer(DetectionTrainer):
+    def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
+        self.progress_queue = overrides.pop("progress_queue", None)
+        super().__init__(cfg, overrides, _callbacks)
+
+
 class ObjectDetection:
     def __init__(self, username: str, project_name: str, model_name: str) -> None:
         self.username = username
@@ -119,26 +127,30 @@ class ObjectDetection:
         df.columns = df.columns.str.strip()
         return df
 
-    async def train(self, epoch: int = 20, on_success=None):
+    async def train(
+        self, epoch: int = 20, on_success=None, on_epoch_end=None, queue=None
+    ):
         model = YOLO("yolov8n.pt")
 
-        model.add_callback(
-            "on_train_epoch_end",
-            lambda pred: _on_train_epoch_end(
-                pred, self.username, self.project_name, self.model_name
-            ),
-        )
+        def epoch_end_callback(pred):
+            _on_train_epoch_end(pred, self.username, self.project_name, self.model_name)
+            if on_epoch_end is not None:
+                pred.progress_queue.put(lambda: on_epoch_end(pred))
+
+        model.add_callback("on_train_epoch_end", epoch_end_callback)
         self.remove_old_model()
         w_path = self.working_path()
         model_name = "models/" + self.model_name
         yaml_path = os.path.join(w_path, "data.yaml")
         print(yaml_path)
         train_result = model.train(
+            CustomDetectionTrainer,
             data=yaml_path,
             epochs=epoch,
             imgsz=224,
             project=w_path,
             name=model_name,
+            progress_queue=queue,
         )
 
         model.export(format="onnx")

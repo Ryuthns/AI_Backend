@@ -142,6 +142,7 @@ class TrainClassification:
         train_ratio=0.8,
         validate_ratio=0.1,
         test_ratio=0.1,
+        on_epoch_end=None,
     ):
         # if bytefiles is None or labels is None:
         #     return
@@ -230,6 +231,10 @@ class TrainClassification:
             batch_result = {"loss": epoch_losses, "accuracy": epoch_accuracies}
             self._save_train_result(batch_result)
 
+            # call function on_epoch_end
+            if on_epoch_end is not None:
+                await on_epoch_end(epochs, epoch)
+
         filename = self.get_model_path()
 
         torch.save(self.model, filename)
@@ -304,17 +309,22 @@ class TrainClassification:
         # Ensure labels are numeric
         all_labels = all_labels.astype(int)
         all_predictions = all_predictions.astype(int)
-        all_predictions2d = all_predictions2d.astype(int)
+        all_predictions2d = all_predictions2d.astype(float)
 
         # Calculate precision, recall, and average precision
         precision = precision_score(all_labels, all_predictions, average="weighted")
         recall = recall_score(all_labels, all_predictions, average="weighted")
         print("Precision:", precision, "Recall:", recall)
 
+        print("wtf" * 20)
         # Calculate average precision
+        if len(all_labels) == 1:
+            all_predictions2d = all_predictions
+        print(all_labels, all_predictions2d, all_predictions)
         average_precision = average_precision_score(
             all_labels, all_predictions2d, average="macro"
         )
+        print("wtf" * 20)
         #
         # Compute confusion matrix
         confusion_mat = confusion_matrix(all_labels, all_predictions)
