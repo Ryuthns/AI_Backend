@@ -23,6 +23,18 @@ from torchvision import transforms
 from helpers.model import load_metadata, save_metadata
 
 
+def preprocess_image(input_image):
+    preprocess = transforms.Compose(
+        [
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+    return preprocess(input_image).unsqueeze(0)
+
+
 def plot_confusion_matrix(confusion_mat, class_names, save_path):
     plt.figure(figsize=(8, 6))
     sns.heatmap(
@@ -39,6 +51,27 @@ def plot_confusion_matrix(confusion_mat, class_names, save_path):
     plt.savefig(save_path)
 
 
+def change_to_class_names(numeric_labels, unique_labels):
+    # Create a reverse mapping from numeric indices to labels
+    index_to_label = {index: label for index, label in enumerate(unique_labels)}
+
+    # Convert numeric labels to class names using the reverse mapping
+    class_names = [index_to_label[index.item()] for index in numeric_labels]
+    return class_names
+
+
+def change_to_num_labels(labels):
+    # Get unique labels
+    unique_labels = sorted(list(set(labels)))
+
+    # Create a mapping from labels to numeric indices
+    label_to_index = {label: index for index, label in enumerate(unique_labels)}
+
+    # Convert original labels to numeric labels using the mapping
+    numeric_labels = torch.tensor([label_to_index[label] for label in labels])
+    return unique_labels, numeric_labels
+
+
 def get_labels_dict(folder_path):
     labels_path = os.path.join(folder_path, "labels/classification.json")
     with open(labels_path, "r") as path:
@@ -53,15 +86,20 @@ def get_labels_dict(folder_path):
     return result
 
 
-def read_json_and_get_image_bytes(json_file_path, images_folder_path):
+def read_json_and_get_image_bytes(
+    json_file_path, images_folder_path, get_image_name=False
+):
     with open(json_file_path, "r") as json_file:
         data = json.load(json_file)
 
     image_bytes_list = []
     labels_list = []
+    image_name = []
 
     for item in data:
         image_filename = item["image"]
+        if get_image_name:
+            image_name.append(image_filename)
         image_path = path.join(images_folder_path, image_filename)
 
         try:
@@ -71,6 +109,9 @@ def read_json_and_get_image_bytes(json_file_path, images_folder_path):
                 labels_list.append(item["annotations"][0])
         except FileNotFoundError:
             print(f"Image file not found: {image_path}")
+
+    if get_image_name:
+        return [image_bytes_list, image_name], labels_list
 
     return image_bytes_list, labels_list
 
