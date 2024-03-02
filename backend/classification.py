@@ -375,9 +375,9 @@ class TrainClassification:
         # Calculate average precision
         if len(all_labels) == 1:
             all_predictions2d = all_predictions
-        print(all_labels, all_predictions2d, all_predictions)
+        print(all_labels.shape, all_predictions2d.shape, all_predictions.shape)
         average_precision = average_precision_score(
-            all_labels, all_predictions2d, average="macro"
+            all_labels, all_predictions, average="macro"
         )
         print("wtf" * 20)
         #
