@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from PIL import Image
 
 from classification import TrainClassification, get_labels_dict
+from cluster import cluster_result
 from helpers.helper import get_key_by_value
 from helpers.model import save_metadata
 from models.ai_models import MetadataModel, result_input
@@ -31,6 +32,7 @@ from objectdetection import ObjectDetection, prepare_yaml, save_predict_img
 from routes.ai_models import router as ModelsRouter
 from routes.project import router as ProjectRouter
 from routes.user import router as UserRouter
+from routes.cluster import router as ClusterRouter
 
 app = FastAPI()
 
@@ -48,7 +50,7 @@ async def process_queue(callback_queue):
                 print("progress break")
                 break
             await item()
-        except Exception as e:
+        except Exception:
             print("Queue is empty or no new data available")
             continue
 
@@ -67,6 +69,7 @@ app.add_middleware(
 app.include_router(UserRouter, prefix="/user")
 app.include_router(ProjectRouter, prefix="/project")
 app.include_router(ModelsRouter, prefix="/model")
+app.include_router(ClusterRouter, prefix="/cluster")
 result_data = {}
 
 
@@ -510,7 +513,7 @@ async def websocket_endpoint(websocket: WebSocket, channel: str):
     try:
         while True:
             # Receive message from the client
-            data = await websocket.receive_text()
+            await websocket.receive_text()
 
             # # Broadcast the message to all clients in the same channel
             # await send_message_to_channel(channel, f"Channel {channel}: {data}")

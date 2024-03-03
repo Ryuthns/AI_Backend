@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Body, Response, Header
+import shutil
+
+from fastapi import APIRouter, Body, Header, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse
 from torchvision import os
-from database.database import MongoModel
-import shutil
 
+from database.database import MongoModel
 from helpers.model import load_metadata
 
 router = APIRouter()
