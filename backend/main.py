@@ -116,53 +116,81 @@ async def create_upload_file(
 
 @app.post("/saveimage/")
 async def save_image(
-    file_name: List[str] = Form(...),
     image_file: List[UploadFile] = File(None),
+    username: str = Form(...),
+    project_name: str = Form(...),
+):
+    try:
+        # save images
+        if image_file is not None:
+            for file in image_file:
+                directory_path = f"user_project/{username}/{project_name}/images"
+                os.makedirs(directory_path, exist_ok=True)
+                file_path = os.path.join(directory_path, file.filename)
+
+                with open(file_path, "wb") as f:
+                    f.write(file.file.read())
+
+            return Response("Image(s) saved successfully", status_code=200)
+        else:
+            return Response("No image(s) to save", status_code=200)
+    except Exception as e:
+        return Response(f"Failed to save image(s): {e.args}", status_code=404)
+    
+    
+@app.post("/saveimagelabel/")
+async def save_imagelabel(
+    file_name: List[str] = Form(...),
     username: str = Form(...),
     project_name: str = Form(...),
     labels: List[str] = Form(...),
 ):
-    # Save user's labels and images
     try:
-        # save labels
         label_list = [labels[i] for i in range(len(labels))]
         data = [
             {"image": filename, "annotations": [label]}
             for filename, label in zip(file_name, label_list)
         ]
-        sorted_data = sorted(data, key=lambda x: x["image"])
-        json_data = json.dumps(sorted_data, indent=2)
 
         directory_path = f"user_project/{username}/{project_name}/labels"
         os.makedirs(directory_path, exist_ok=True)
         file_path = os.path.join(directory_path, "classification.json")
 
+        # Load existing data or create an empty list
+        existing_data = []
+        if os.path.exists(file_path):
+            with open(file_path, "r") as json_file:
+                try:
+                    existing_data = json.load(json_file)
+                except json.JSONDecodeError:
+                    # Handle the case where the file is not a valid JSON
+                    existing_data = []
+
+        # Update existing entries with new data or append new entries
+        for new_entry in data:
+            existing_image_entries = [entry for entry in existing_data if entry["image"] == new_entry["image"]]
+            if existing_image_entries:
+                # Update existing entry with new data
+                existing_image_entries[0].update(new_entry)
+            else:
+                # Append new entry
+                existing_data.append(new_entry)
+
+        # Sort the data based on the "image" key
+        sorted_data = sorted(existing_data, key=lambda x: x["image"])
+        json_data = json.dumps(sorted_data, indent=2)
+
+        # Write the sorted data back to the file
         with open(file_path, "w") as json_file:
             json_file.write(json_data)
 
-        # save images
-        if image_file is not None:
-            for file in image_file:
-                directory_path = f"user_project/{username}/{project_name}/images"
-
-                os.makedirs(directory_path, exist_ok=True)
-
-                file_path = os.path.join(directory_path, file.filename)
-
-                with open(file_path, "wb") as f:
-                    f.write(file.file.read())
-            return Response("File(s) saved successfully", status_code=200)
-
         return Response("Label(s) updated successfully", status_code=200)
     except Exception as e:
-        return Response(
-            f"Failed to save image(s) and label(s) {e.args}", status_code=404
-        )
+        return Response(f"Failed to save label(s): {e}", status_code=404)
 
 
-@app.post("/saveobject/")
+@app.post("/saveobjectlabel/")
 async def save_object(
-    image_file: List[UploadFile] = File(None),
     username: str = Form(...),
     project_name: str = Form(...),
     labels: str = Form(...),
@@ -192,26 +220,11 @@ async def save_object(
                 label_file.write(class_name + "\n")
         prepare_yaml(username, project_name, classnames_list)
 
-        # Save images
-        if image_file is not None:
-            images_directory = f"user_project/{username}/{project_name}/images"
-            os.makedirs(images_directory, exist_ok=True)
-
-            for file in image_file:
-                # Use a different variable for the images directory path
-                image_directory_path = f"user_project/{username}/{project_name}/images"
-
-                image_path = os.path.join(image_directory_path, file.filename)
-                with open(image_path, "wb") as f:
-                    f.write(file.file.read())
-
-            return Response("Image(s) saved successfully", status_code=200)
-
         return Response("Label(s) updated successfully", status_code=200)
 
     except Exception as e:
         return Response(
-            f"Failed to save image(s) and label(s): {str(e)}", status_code=500
+            f"Failed to save label(s): {str(e)}", status_code=500
         )
 
 
