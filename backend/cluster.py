@@ -64,7 +64,7 @@ def cluster_result(image_path, label_path, save_path=None):
     print(X.head())
     #
     cl = Clustimage()
-    results = cl.fit_transform(images, max_clust=len(unique_labels))
+    results = cl.fit_transform(images, min_clust=2, max_clust=len(unique_labels))
     actual_labels = change_to_class_names(results["labels"], unique_labels)
     results["true_labels"] = labels_name
     results["labels"] = actual_labels
@@ -77,8 +77,7 @@ def cluster_result(image_path, label_path, save_path=None):
     save_result["actual_labels"] = results["labels"]
     save_result["true_labels"] = results["true_labels"]
     save_result["xycoord"] = results["xycoord"].tolist()
-    print(save_result)
-    print(results)
+    print(save_result["actual_labels"])
     result_path = os.path.join(save_path, "cluster.json")
     with open(result_path, "w") as f:
         json.dump(save_result, f, indent=4)
@@ -92,4 +91,3 @@ if __name__ == "__main__":
         "/home/dsy/coding/project-year-4/AI_Backend/backend/user_project/ong2/ball/labels/classification.json",
         "",
     )
-    print(result)
