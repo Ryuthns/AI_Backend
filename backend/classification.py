@@ -413,13 +413,17 @@ class TrainClassification:
         print("Precision:", precision, "Recall:", recall)
 
         print("wtf" * 20)
+
         # Calculate average precision
-        if len(all_labels) == 1:
-            all_predictions2d = all_predictions
         print(all_labels.shape, all_predictions2d.shape, all_predictions.shape)
-        average_precision = average_precision_score(
-            all_labels, all_predictions, average="macro"
-        )
+        if len(classname) > 2:
+            average_precision = average_precision_score(
+                all_labels, all_predictions2d, average="macro"
+            )
+        else:
+            average_precision = average_precision_score(
+                all_labels, all_predictions, average="macro"
+            )
         print("wtf" * 20)
         #
         # Compute confusion matrix
